@@ -95,6 +95,8 @@ h2{font-family:var(--display);font-weight:600;font-size:1.1rem;margin:0}
 /* connexion */
 .login{min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:24px 16px}
 .login h1{font-size:1.8rem;text-align:center}
+.app.stale{pointer-events:none;opacity:.6;transition:opacity .2s}
+.app.stale::before{content:"Mise à jour…";position:fixed;top:calc(8px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:5;background:var(--surface);color:var(--muted);border:1px solid var(--line);border-radius:99px;padding:3px 12px;font-size:.78rem;opacity:1}
 .login .logo{width:96px;height:96px;border-radius:50%;margin-bottom:-8px;box-shadow:0 6px 18px rgba(0,0,0,.18)}
 .dots{display:flex;gap:14px}
 .dots i{width:16px;height:16px;border-radius:50%;border:2px solid var(--lagoon)}
@@ -213,7 +215,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-13c";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-13d";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -247,30 +249,52 @@ const cache={weeks:{}};
 let backend=null;
 
 // ---------- serveur ----------
+// Chaque backend envoie une requête brute ({action,token,data} ou {batch:[…],token}) et rend la réponse de api().
+const errMsg=e=>String(e&&e.message||e).replace(/^(Exception|Error):\s*/,"");
 function gasBackend(){
-  return {call:(action,data)=>new Promise((ok,ko)=>google.script.run.withSuccessHandler(ok)
-    .withFailureHandler(e=>ko(new Error(String(e&&e.message||e).replace(/^(Exception|Error):\s*/,"")))).apiCall({action,token,data}))};
+  return {send:req=>new Promise((ok,ko)=>google.script.run.withSuccessHandler(ok)
+    .withFailureHandler(e=>ko(new Error(errMsg(e)))).apiCall(req))};
 }
 function fetchBackend(){
   // text/plain : pas de requête préalable CORS ; Google redirige vers googleusercontent qui autorise toutes les origines
-  return {call:async(action,data)=>{
+  return {send:async req=>{
     let r;
-    try{r=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action,token,data}),redirect:"follow"})}
+    try{r=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(req),redirect:"follow"})}
     catch(e){throw new Error("Pas de connexion internet ?")}
     let j;try{j=await r.json()}catch(e){throw new Error("Le serveur ne répond pas, réessaie")}
     if(!j.ok)throw new Error(j.erreur||"Erreur");
     return j.r;
   }};
 }
-function localBackend(){return {call:async(action,data)=>{await new Promise(r=>setTimeout(r,120));return window.LOCAL_API({action,token,data})}}}
+function localBackend(){return {send:async req=>{await new Promise(r=>setTimeout(r,120));return window.LOCAL_API(req)}}}
+// Les appels lancés au même moment partent ensemble dans une seule requête (un seul aller-retour).
+let file=[];
+function envoyerFile(){
+  const lot=file;file=[];
+  const echec=e=>lot.forEach(q=>q.ko(e));
+  if(lot.length===1){const q=lot[0];backend.send({action:q.action,token,data:q.data}).then(q.ok,q.ko);return}
+  backend.send({batch:lot.map(q=>({action:q.action,data:q.data})),token}).then(res=>{
+    lot.forEach((q,i)=>{const x=res&&res[i];if(x&&x.ok)q.ok(x.r);else q.ko(new Error(x?x.erreur:"Erreur"))});
+  },echec);
+}
+function envoyer(action,data){
+  if(action==="login")return backend.send({action,data});
+  return new Promise((ok,ko)=>{file.push({action,data,ok,ko});if(file.length===1)setTimeout(envoyerFile,0)});
+}
 async function call(action,data){
-  try{return await backend.call(action,data||{})}
+  try{return await envoyer(action,data||{})}
   catch(e){
-    const msg=String(e.message||e).replace(/^(Exception|Error):\s*/,"");
+    const msg=errMsg(e);
     if(msg==="SESSION"){logout(true);throw new Error("Reconnecte-toi avec ton code")}
     throw new Error(msg);
   }
 }
+// Mémoire de l'appli sur le téléphone : on réaffiche tout de suite le dernier écran vu, puis on le met à jour.
+const MEM_KEY="equipe-clv-memoire";
+let mem={};
+function memLire(){try{mem=JSON.parse(localStorage.getItem(MEM_KEY)||"{}")||{}}catch(e){mem={}}}
+function memEcrire(){try{localStorage.setItem(MEM_KEY,JSON.stringify(mem))}catch(e){try{mem.vues={};localStorage.setItem(MEM_KEY,JSON.stringify(mem))}catch(e2){}}}
+function memEffacer(){mem={};try{localStorage.removeItem(MEM_KEY)}catch(e){}}
 function toast(msg,bad){const t=$("#toast");t.textContent=msg;t.className="toast"+(bad?" bad":"");t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>t.hidden=true,bad?4500:2200)}
 async function act(fn,okMsg){try{const r=await fn();if(okMsg)toast(okMsg);return r}catch(e){toast(e.message,true);throw e}}
 const today=()=>S.now.date;
@@ -306,14 +330,20 @@ function loginView(err){
   document.onkeydown=e=>{if(!$("#dots"))return;if(/^\d$/.test(e.key))press(e.key);else if(e.key==="Backspace")press("del")};
   const how=$("#lg-how");if(how)how.onclick=()=>installSheet();
 }
-function logout(silent){token=null;S=null;try{localStorage.removeItem(TOKEN_KEY)}catch(e){};close();loginView(silent?"Reconnecte-toi avec ton code":"")}
+function logout(silent){token=null;S=null;memEffacer();try{localStorage.removeItem(TOKEN_KEY)}catch(e){};close();loginView(silent?"Reconnecte-toi avec ton code":"")}
 
 async function start(){
-  $("#root").innerHTML=`<div class="spin"></div>`;
-  S=await call("boot");
   document.onkeydown=null;
   cache.weeks={};
-  go(view||"accueil");
+  memLire();
+  const frais=call("boot").then(s=>{
+    const autreJour=!S||S.now.date!==s.now.date||S.me.id!==s.me.id;
+    S=s;mem.S=s;memEcrire();
+    if(autreJour){cache.weeks={};go(view||"accueil")}else tabs();
+  });
+  if(mem.S){S=mem.S;go(view||"accueil");frais.catch(e=>{if(/code/i.test(e.message))return;toast(e.message,true)});return}
+  $("#root").innerHTML=`<div class="spin"></div>`;
+  await frais;
 }
 
 // ---------- navigation ----------
@@ -330,10 +360,16 @@ function go(v,s){
   view=v; if(s!==undefined)sub=s;
   close(); window.scrollTo(0,0);
   tabs();
-  const r=$("#root");
-  r.innerHTML=`<div class="app" id="app"><div class="spin"></div></div>`;
+  const r=$("#root"), cle=v+"|"+(sub||"")+"|"+S.me.id, vues=mem.vues||(mem.vues={}), vu=vues[cle];
+  r.innerHTML=vu?`<div class="app stale" id="app">${vu}</div>`:`<div class="app" id="app"><div class="spin"></div></div>`;
+  const tour=go.tour=(go.tour||0)+1;
   const fn={accueil:vAccueil,planning:vPlanning,taches:vTaches,inventaire:vInventaire,repos:vRepos,gerer:vGerer}[v]||vAccueil;
-  fn().catch(e=>{if(view===v)$("#app").innerHTML=`<div class="card"><b>Oups</b><p class="hint">${esc(e.message)}</p><button class="btn" id="retry">Réessayer</button></div>`;const b=$("#retry");if(b)b.onclick=()=>go(v)});
+  fn().then(()=>{
+    if(go.tour!==tour||view!==v)return;
+    const app=$("#app");if(!app)return;
+    app.classList.remove("stale");
+    vues[cle]=app.innerHTML;mem.vues=vues;memEcrire();
+  }).catch(e=>{if(view!==v)return;const app=$("#app");if(!app)return;app.classList.remove("stale");app.innerHTML=`<div class="card"><b>Oups</b><p class="hint">${esc(e.message)}</p><button class="btn" id="retry">Réessayer</button></div>`;const b=$("#retry");if(b)b.onclick=()=>go(v)});
 }
 function header(title,subtitle,right){
   return `<header class="top"><div class="grow"><h1>${title}</h1></div>${right||`<div class="who">${esc(S.me.prenom)}<br><button class="btn small ghost" id="out" style="padding:3px 9px;font-size:.78rem">Changer</button></div>`}</header>${subtitle?`<p class="sub">${subtitle}</p>`:""}`;
