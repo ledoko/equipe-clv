@@ -220,7 +220,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-14k";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-14l";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -540,7 +540,7 @@ async function vTaches(){
     const badge=x.freq==="semaine"?`<span class="pill info">Hebdo</span>`:x.freq==="mois"?`<span class="pill info">Mensuel</span>`:"";
     const late=x.retard&&!x.fait?`<span class="pill no">Prévu ${jourCourt(x.echeance)}</span>`:"";
     const who=`<span class="who2">${x.fait?`✓ Fait par ${esc(x.fait.par)} à ${x.fait.le.slice(11,16)}`:""}</span>`;
-    const meta=[badge,late,x.qui?`<span>· ${esc(x.qui)}</span>`:"",who].filter(Boolean).join("");
+    const meta=[badge,late,x.type==="comptage"&&!x.fait?`<span class="pill info">📋 Ouvre le comptage</span>`:"",x.qui?`<span>· ${esc(x.qui)}</span>`:"",who].filter(Boolean).join("");
     html+=`<button class="task ${x.fait?"done":""}" data-t="${esc(x.id)}" ${d>today()?"disabled":""}><span class="box">${x.fait?"✓":""}</span><span class="grow"><div class="tt">${esc(x.titre)}</div>${x.note?`<div class="nn">${esc(x.note)}</div>`:""}<div class="meta">${meta}</div></span></button>`;
   });
   $("#app").innerHTML=`${header("Tâches")}
@@ -559,6 +559,7 @@ async function vTaches(){
   $("#tl").addEventListener("click",async e=>{
     const b=e.target.closest("[data-t]");if(!b||b.disabled)return;
     const x=list.find(y=>y.id===b.dataset.t), fait=!x.fait;
+    if(x.type==="comptage"&&fait&&d===today()){comptageSheet(x);return}
     const w=b.querySelector(".who2");
     x.fait=fait?{par:S.me.prenom,le:"0000-00-00 "+heureLocale()}:null;
     b.classList.toggle("done",fait);b.querySelector(".box").textContent=fait?"✓":"";
@@ -1009,6 +1010,34 @@ function absenceSheet(s){
   <div class="actions"><button class="btn ghost" id="a-no">Annuler</button><button class="btn" id="a-ok">Valider</button></div>`,()=>{
     $("#a-no").onclick=close;
     $("#a-ok").onclick=async()=>{$("#a-ok").disabled=true;try{await act(()=>call("demandeCreer",{type:$("#a-t").value,du:s.date,au:$("#a-au").value||s.date,motif:$("#a-m").value,empId:s.empId,accepter:true}),"Enregistré");close();cache.weeks={};go("planning")}catch(e){$("#a-ok").disabled=false}};
+  });
+}
+// ---------- comptage des pipettes de sauce et des pots de condiments -> tâches « Remplir … »
+async function comptageSheet(tache){
+  let r;try{r=await call("remplissage")}catch(e){toast(e.message,true);return}
+  if(!r.items.length){toast("Aucune sauce ni condiment à compter : la liste se règle sur l'écran de gestion",true);return}
+  const vals={};
+  const grp=(type,titre)=>{const it=r.items.filter(i=>i.type===type);if(!it.length)return"";
+    return `<div class="grp">${titre}</div>`+it.map(i=>`<div class="inv" data-c="${esc(i.id)}"><div class="t"><div class="a">${esc(i.nom)}</div><div class="b">objectif ${i.cible}${i.aRemplir?` · déjà ${i.aRemplir} à remplir`:""}</div></div>
+    <div class="step"><button data-d="-1" aria-label="Moins">−</button><input inputmode="numeric" value="" placeholder="?" aria-label="Nombre ${esc(i.nom)}"><button data-d="1" aria-label="Plus">+</button></div></div>`).join("")};
+  open(`<h3>Compter les pipettes et les condiments</h3><p class="hint">Note combien il en reste de chaque. Ce qui manque devient une tâche « Remplir » qui reste jusqu'à ce qu'elle soit faite.</p>
+  <div class="list" id="cl">${grp("pipette","Sauces (pipettes)")}${grp("pot","Condiments (pots)")}</div>
+  <div class="actions"><button class="btn ghost" id="c-no">Annuler</button><button class="btn" id="c-ok">Valider (0)</button></div>`,()=>{
+    const cl=$("#cl"),upd=()=>{$("#c-ok").textContent=`Valider (${Object.keys(vals).filter(k=>vals[k]!=="").length})`};
+    const mark=row=>{const i=r.items.find(x=>x.id===row.dataset.c),v=vals[i.id];row.classList.toggle("low",v!==""&&v!=null&&+v<i.cible)};
+    cl.addEventListener("click",e=>{const b=e.target.closest("[data-d]");if(!b)return;const row=b.closest("[data-c]"),inp=row.querySelector("input");const v=Math.max(0,(parseInt(inp.value)||0)+(+b.dataset.d));inp.value=v;vals[row.dataset.c]=String(v);upd();mark(row)});
+    cl.addEventListener("input",e=>{const row=e.target.closest("[data-c]");if(!row)return;vals[row.dataset.c]=e.target.value.replace(/[^0-9]/g,"");upd();mark(row)});
+    $("#c-no").onclick=close;
+    $("#c-ok").onclick=async()=>{
+      const lignes=Object.keys(vals).filter(k=>vals[k]!=="").map(k=>({itemId:k,qte:vals[k]}));
+      if(!lignes.length){toast("Compte au moins une sauce ou un condiment",true);return}
+      const manquants=r.items.filter(i=>vals[i.id]==null||vals[i.id]==="").length;
+      const valider=async()=>{$("#c-ok").disabled=true;try{const res=await call("comptageValider",{lignes,tacheId:tache.id});
+        open(`<h3>Comptage enregistré ✓</h3>${res.aRemplir.length?`<p class="hint">Ajouté aux tâches (post-service) :</p>${res.aRemplir.map(t=>`<div class="item"><span>🧴</span><div class="t"><div class="a">${esc(t)}</div></div></div>`).join("")}`:`<p class="hint">Tout est au complet. Merci !</p>`}<button class="btn full" id="c-fin">OK</button>`,()=>{$("#c-fin").onclick=()=>{close();go("taches")}});
+      }catch(e){toast(e.message,true);$("#c-ok").disabled=false}};
+      if(manquants&&!confirm(manquants+(manquants>1?" articles pas comptés":" article pas compté")+". Valider quand même ?"))return;
+      valider();
+    };
   });
 }
 function confirmSheet(title,text,label,fn){

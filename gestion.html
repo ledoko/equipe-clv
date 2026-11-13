@@ -193,7 +193,7 @@ async function start(){
 }
 
 // ---------- coque : menu à gauche
-const PAGES=[["taches","✅","Tâches"],["planning","📅","Planning"],["articles","📦","Articles"],["fournisseurs","🚚","Fournisseurs"],["rapports","🧾","Rapports"],["equipe","👥","Équipe"]];
+const PAGES=[["taches","✅","Tâches"],["planning","📅","Planning"],["articles","📦","Articles"],["fournisseurs","🚚","Fournisseurs"],["remplissage","🧴","Sauces & condiments"],["rapports","🧾","Rapports"],["equipe","👥","Équipe"]];
 function shell(){
   $("#root").innerHTML=`<div class="shell"><aside class="side"><div class="logo"><img src="icon-192.png" alt=""><b>Gestion<br>Café La Victoria</b></div>
   ${PAGES.map(([k,i,l,later])=>`<button class="nav ${later?"later":""}" data-v="${k}" ${view===k?'aria-current="page"':""} ${later?'title="Bientôt"':""}><span>${i}</span>${l}${k==="taches"?'<span class="n" id="nsugg" hidden></span>':""}${later?'<span class="muted small" style="margin-left:auto">bientôt</span>':""}</button>`).join("")}
@@ -201,7 +201,7 @@ function shell(){
   <main class="main" id="main"></main></div>`;
   $("#root").querySelectorAll(".nav:not(.later)").forEach(b=>b.onclick=()=>{view=b.dataset.v;shell()});
   $("#out").onclick=()=>confirmer("Se déconnecter ?","Tu devras retaper ton code.","Se déconnecter",async()=>{try{await call("deconnexion",{token})}catch(e){}logout()});
-  const fn={taches:pTaches,planning:pPlanning,articles:pArticles,fournisseurs:pFournisseurs,rapports:pRapports,equipe:pEquipe}[view]||pTaches;
+  const fn={taches:pTaches,planning:pPlanning,articles:pArticles,fournisseurs:pFournisseurs,remplissage:pRemplissage,rapports:pRapports,equipe:pEquipe}[view]||pTaches;
   $("#main").innerHTML=`<div class="spin"></div>`;
   fn().catch(e=>{$("#main").innerHTML=`<div class="card"><b>Oups</b><p class="muted">${esc(e.message)}</p><button class="btn" id="retry">Réessayer</button></div>`;$("#retry").onclick=shell});
 }
@@ -543,6 +543,35 @@ async function pFournisseurs(){
   $("#main").querySelectorAll("[data-arts]").forEach(b=>b.onclick=()=>{Object.assign(A,{fourn:b.dataset.arts,zone:"",q:"",seuil:"",etat:"actifs"});view="articles";shell()});
   $("#tb").addEventListener("change",async e=>{const tr=e.target.closest("tr[data-id]"),f=e.target.dataset.f;if(!tr||!f)return;
     try{await call("fournisseurSave",{id:tr.dataset.id,[f]:e.target.value.trim()});const s=$("#saved");if(s){s.textContent="✓ Enregistré";setTimeout(()=>{if($("#saved"))$("#saved").textContent=""},1500)}if(f==="type")pFournisseurs()}catch(err){toast(err.message,true);pFournisseurs()}});
+}
+
+// =====================================================================================  SAUCES & CONDIMENTS
+async function pRemplissage(){
+  const r=await call("remplissageAdmin");
+  const row=i=>`<tr data-id="${esc(i.id)}">
+    <td><input data-f="nom" value="${esc(i.nom)}"></td>
+    <td><select data-f="type"><option value="pipette" ${i.type==="pipette"?"selected":""}>Pipette (sauce)</option><option value="pot" ${i.type==="pot"?"selected":""}>Pot (condiment)</option></select></td>
+    <td><input data-f="cible" type="number" min="0" value="${esc(i.cible)}"></td>
+    <td><input data-f="ordre" type="number" value="${esc(i.ordre)}"></td>
+    <td style="text-align:center"><input type="checkbox" data-f="actif" ${i.actif!=="non"?"checked":""} style="width:auto"></td>
+    <td style="text-align:center"><button class="btn small ghost" data-del="${esc(i.id)}" title="Supprimer">✕</button></td></tr>`;
+  const dern=r.dernier;
+  $("#main").innerHTML=`<div class="top"><h1 class="grow">Sauces & condiments</h1><span class="saved" id="saved"></span></div>
+  <p class="muted small" style="margin-top:-6px">Chaque jour au post-service, la tâche « Compter les pipettes et les condiments » ouvre l'écran de comptage. Pour chaque article sous l'objectif, une tâche « Remplir N … » est créée et reste dans les tâches jusqu'à ce qu'elle soit cochée.</p>
+  <div style="display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:16px;align-items:start">
+  <div class="card"><div class="scrollx"><table class="t" style="min-width:560px"><colgroup><col><col style="width:160px"><col style="width:90px"><col style="width:70px"><col style="width:60px"><col style="width:50px"></colgroup>
+    <thead><tr><th>Nom</th><th>Type</th><th>Objectif</th><th>Ordre</th><th>Actif</th><th></th></tr></thead><tbody id="tb">${r.items.map(row).join("")||`<tr><td colspan="6" class="muted">Aucun article</td></tr>`}</tbody></table></div>
+    <div class="row" style="margin-top:10px;gap:8px"><input id="n-nom" placeholder="Nouvelle sauce ou nouveau condiment" style="flex:1"><select id="n-type" style="width:170px"><option value="pipette">Pipette (sauce)</option><option value="pot">Pot (condiment)</option></select><input id="n-cible" type="number" min="0" value="6" style="width:80px" title="Objectif"><button class="btn" id="n-add">Ajouter</button></div></div>
+  <div>
+    <div class="card"><h3>À remplir en ce moment (${r.ouverts.length})</h3>${r.ouverts.map(o=>`<div class="small" style="padding:4px 0">• ${esc(o.titre)} <span class="muted">· depuis le ${o.creeLe.slice(8,10)}/${o.creeLe.slice(5,7)} ${o.creeLe.slice(11,16)}</span></div>`).join("")||`<p class="muted small">Rien à remplir.</p>`}</div>
+    <div class="card" style="margin-top:16px"><h3>Dernier comptage</h3>${dern?`<p class="muted small">${dern.le.slice(8,10)}/${dern.le.slice(5,7)} à ${dern.le.slice(11,16)} par ${esc(dern.par)}</p>${dern.lignes.map(l=>`<div class="small row" style="padding:2px 0"><span class="grow">${esc(l.nom)}</span><b style="${l.qte<l.cible?"color:var(--warn)":""}">${l.qte} / ${l.cible}</b></div>`).join("")}`:`<p class="muted small">Pas encore de comptage.</p>`}</div>
+  </div></div>`;
+  const ok=()=>{const s=$("#saved");if(s){s.textContent="✓ Enregistré";setTimeout(()=>{if($("#saved"))$("#saved").textContent=""},1500)}};
+  $("#tb").addEventListener("change",async e=>{const tr=e.target.closest("tr[data-id]"),f=e.target.dataset.f;if(!tr||!f)return;
+    try{await call("remplissageSave",{id:tr.dataset.id,[f]:e.target.type==="checkbox"?(e.target.checked?"oui":"non"):e.target.value.trim()});ok();if(f==="type"||f==="ordre")pRemplissage()}catch(err){toast(err.message,true);pRemplissage()}});
+  $("#tb").querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{const i=r.items.find(x=>x.id===b.dataset.del);confirmer(`Supprimer « ${i.nom} » ?`,"Il ne sera plus compté, et sa tâche « Remplir » en cours disparaît.","Supprimer",async()=>{await act(()=>call("remplissageSupprimer",{id:i.id}),"Supprimé");pRemplissage()})});
+  $("#n-add").onclick=async()=>{const nom=$("#n-nom").value.trim();if(!nom){toast("Donne un nom",true);return}
+    try{await call("remplissageSave",{nom,type:$("#n-type").value,cible:$("#n-cible").value||"6"});toast("Ajouté");pRemplissage()}catch(err){toast(err.message,true)}};
 }
 
 // =====================================================================================  RAPPORTS
