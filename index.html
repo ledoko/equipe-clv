@@ -220,7 +220,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-14j";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-14k";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -575,7 +575,8 @@ async function vInventaire(){
   const wd=String(wday(today())), JN=["","lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"];
   const duJour=r.articles.some(a=>(a.jours||"").split(",").includes(wd));
   const zone=sub&&sub.zone||(duJour?"jour":"tout"), q=(sub&&sub.q||"").toLowerCase();
-  const save=()=>{try{localStorage.setItem(INV_KEY,JSON.stringify(draft))}catch(e){}};
+  const save=()=>{try{localStorage.setItem(INV_KEY,JSON.stringify(draft));const db=+localStorage.getItem(INV_KEY+"-debut")||0;if(!db||Date.now()-db>12*3600e3)localStorage.setItem(INV_KEY+"-debut",String(Date.now()))}catch(e){}};
+  const debutMs=()=>{try{return +localStorage.getItem(INV_KEY+"-debut")||0}catch(e){return 0}};
   const vis=r.articles.filter(a=>(zone==="tout"||(zone==="jour"?(a.jours||"").split(",").includes(wd):(a.zone||"Autre")===zone))&&(!q||a.nom.toLowerCase().includes(q)||a.fournisseur.toLowerCase().includes(q)));
   const counted=()=>Object.keys(draft).filter(k=>draft[k]!==""&&draft[k]!=null).length;
   $("#app").innerHTML=`${header("Inventaire","Compte ce qu'il reste. Laisse vide ce que tu ne comptes pas.")}
@@ -600,8 +601,8 @@ async function vInventaire(){
     const lignes=Object.keys(draft).filter(k=>draft[k]!==""&&draft[k]!=null).map(k=>({articleId:k,qte:draft[k]}));
     if(!lignes.length){toast("Compte au moins un article",true);return}
     confirmSheet("Valider l'inventaire ?",plural(lignes.length,"article")+" compté"+(lignes.length>1?"s":"")+".","Valider",async()=>{
-      const res=await act(()=>call("inventaireValider",{lignes}));
-      draft={};save();
+      const res=await act(()=>call("inventaireValider",{lignes,debutMs:debutMs()}));
+      draft={};try{localStorage.setItem(INV_KEY,"{}");localStorage.removeItem(INV_KEY+"-debut")}catch(e){}
       open(`<h3>Inventaire enregistré ✓</h3>${res.aCommander.length?`<p class="hint">À commander (David est prévenu) :</p>${res.aCommander.map(f=>`<div class="card"><b>${esc(f.fournisseur)}</b>${f.lignes.map(l=>`<div class="row small"><span class="grow">${esc(l.nom)}</span><span class="muted">reste ${l.stock}</span><b>+${l.qte}</b></div>`).join("")}</div>`).join("")}`:`<p class="hint">Rien sous le minimum. Merci !</p>`}<button class="btn full" id="iok">OK</button>`,()=>{$("#iok").onclick=()=>{close();go("inventaire")}});
     });
   };
@@ -886,6 +887,8 @@ async function gJour(){
   <section class="card"><div class="sechead"><h2>Arrivées et départs</h2></div>
   ${r.personnes.length?`<div class="scrollx"><table class="rep"><thead><tr><th>Qui</th><th>Prévu</th><th>Arrivée</th><th>Départ</th><th>Pause</th></tr></thead><tbody>${r.personnes.map(p=>`<tr><td>${esc(p.prenom)}${p.corrige?` <small class="muted">corrigé</small>`:""}</td><td>${esc(p.prevu||"—")}</td><td>${h(p.arrivee,p.arriveeNotee,p.corrige?0:p.ecartArrivee)}</td><td>${h(p.depart,p.departNotee,p.corrige?0:p.ecartDepart)}</td><td>${p.pause?p.pause+" min":"—"}</td></tr>`).join("")}</tbody></table></div>`:`<p class="hint">Personne au planning ce jour-là.</p>`}
   <p class="hint small">⚠ = l'heure a été notée plus de ${r.ecartMax} min après coup (ou avant).</p></section>
+  <section class="card"><div class="sechead"><h2>Inventaire</h2></div>
+  ${(r.inventaires||[]).length?`<div class="list">${r.inventaires.map(i=>`<div class="item"><b class="num" style="min-width:3.2em">${i.debut||i.fin}</b><div class="t"><div class="a">${esc(i.prenom)} · ${i.debut?`${i.debut} → ${i.fin} · <b>${i.duree<60?i.duree+" min":dur(i.duree)}</b>`:`validé à ${i.fin} <span class="muted">(début inconnu)</span>`}</div><div class="b">${plural(i.nb,"article")} compté${i.nb>1?"s":""}</div></div></div>`).join("")}</div>`:`<p class="hint">Pas d'inventaire ce jour-là.</p>`}</section>
   <section class="card"><div class="sechead"><h2>Tâches faites</h2><small>${r.faites.length}</small></div>
   ${r.faites.length?`<div class="list">${r.faites.map(f=>`<div class="item"><b class="num" style="min-width:3.2em">${f.heure}</b><div class="t"><div class="a">${esc(f.titre)}</div><div class="b">${esc(f.par)} · ${esc(f.moment)}${f.freq!=="jour"?" · "+(f.freq==="semaine"?"hebdo":"mensuel"):""}</div></div></div>`).join("")}</div>`:`<p class="hint">Aucune tâche cochée.</p>`}</section>
   <section class="card"><div class="sechead"><h2>Pas faites</h2><small>${r.pasFaites.length}</small></div>
