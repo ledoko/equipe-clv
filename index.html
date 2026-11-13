@@ -218,7 +218,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-14";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-14b";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -1023,9 +1023,22 @@ function installSheet(){
   });
 }
 
+// nouvelle version publiée ? (page hébergée) -> on recharge tout seul, avec une adresse neuve pour passer le cache
+async function verifierVersion(){
+  if(!API_URL)return;
+  try{
+    const r=await fetch("version.json?t="+Date.now(),{cache:"no-store"});const j=await r.json();
+    if(j.v&&j.v!==APP_VERSION){
+      const k="equipe-clv-maj-"+j.v;if(sessionStorage.getItem(k))return; // une seule tentative par version
+      sessionStorage.setItem(k,"1");location.replace(location.pathname+"?v="+encodeURIComponent(j.v));
+    }
+  }catch(e){}
+}
+verifierVersion();
 // au retour sur l'appli (téléphone sorti de veille), on rafraîchit la date et l'écran
 let hiddenAt=0;
 document.addEventListener("visibilitychange",async()=>{
+  if(!document.hidden)verifierVersion();
   if(document.hidden){hiddenAt=Date.now();return}
   if(!S||Date.now()-hiddenAt<5*60000||!$("#scrim").hidden)return;
   try{S=await call("boot");cache.weeks={};go(view)}catch(e){}
