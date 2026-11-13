@@ -220,7 +220,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-14i";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-14j";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -438,7 +438,7 @@ async function vAccueil(){
 
 // ---------- planning ----------
 async function vPlanning(){
-  const l=sub&&sub.lundi||lundiDe(today()), mode=sub&&sub.mode||"equipe";
+  const l=sub&&sub.lundi||lundiDe(today()), mode=isAdmin()?(sub&&sub.mode||"equipe"):"moi";
   const w=await week(l,true);
   $("#app").classList.add("wide");
   const me=S.me.id, admin=isAdmin(), t=today();
@@ -459,7 +459,7 @@ async function vPlanning(){
   }).join("");
   $("#app").innerHTML=`${header("Planning")}
   <div class="nav noprint"><button class="icon" id="wprev" aria-label="Semaine précédente">‹</button><b>${titre}</b><button class="icon" id="wnext" aria-label="Semaine suivante">›</button></div>
-  <div class="row wrap noprint"><div class="chips grow"><button class="chip" data-m="equipe" aria-pressed="${mode==="equipe"}">Toute l'équipe</button><button class="chip" data-m="moi" aria-pressed="${mode==="moi"}">Mon planning</button>${l!==lundiDe(t)?`<button class="chip" id="wtoday">Cette semaine</button>`:""}</div>
+  <div class="row wrap noprint"><div class="chips grow">${admin?`<button class="chip" data-m="equipe" aria-pressed="${mode==="equipe"}">Toute l'équipe</button><button class="chip" data-m="moi" aria-pressed="${mode==="moi"}">Mon planning</button>`:""}${l!==lundiDe(t)?`<button class="chip" id="wtoday">Cette semaine</button>`:""}</div>
   ${admin?`<button class="btn small ghost" id="stype">Semaine type</button>`:""}</div>
   <div class="days">${days}</div>
   ${admin?`<p class="hint">Les semaines se remplissent toutes seules à partir de la semaine type. Les repos acceptés retirent les postes de la personne. <button class="btn small ghost" id="reapp">Refaire cette semaine depuis la semaine type</button></p>`:""}`;
