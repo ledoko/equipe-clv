@@ -220,7 +220,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-14m";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-14n";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -1020,7 +1020,7 @@ async function comptageSheet(tache){
   if(!r.items.length){toast("Aucune sauce ni condiment à compter : la liste se règle sur l'écran de gestion",true);return}
   const vals={};
   const grp=(type,titre)=>{const it=r.items.filter(i=>i.type===type);if(!it.length)return"";
-    return `<div class="grp">${titre}</div>`+it.map(i=>`<div class="inv" data-c="${esc(i.id)}"><div class="t"><div class="a">${esc(i.nom)}</div><div class="b">objectif ${i.cible}${i.aRemplir?` · déjà ${i.aRemplir} à remplir`:""}</div></div>
+    return `<div class="grp">${titre}</div>`+it.map(i=>`<div class="inv" data-c="${esc(i.id)}"><div class="t"><div class="a">${esc(i.nom)}</div><div class="b">objectif ${i.cible}${i.weekend?" (week-end)":""}${i.aRemplir?` · déjà ${i.aRemplir} à remplir`:""}</div></div>
     <div class="step"><button data-d="-1" aria-label="Moins">−</button><input inputmode="numeric" value="" placeholder="?" aria-label="Nombre ${esc(i.nom)}"><button data-d="1" aria-label="Plus">+</button></div></div>`).join("")};
   open(`<h3>Compter les pipettes et les condiments</h3><p class="hint">Note combien il en reste de chaque. Ce qui manque devient une tâche « Remplir » qui reste jusqu'à ce qu'elle soit faite.</p>
   <div class="list" id="cl">${grp("pipette","Sauces (pipettes)")}${grp("pot","Condiments (pots)")}</div>

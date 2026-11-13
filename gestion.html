@@ -552,15 +552,16 @@ async function pRemplissage(){
     <td><input data-f="nom" value="${esc(i.nom)}"></td>
     <td><select data-f="type"><option value="pipette" ${i.type==="pipette"?"selected":""}>Pipette (sauce)</option><option value="pot" ${i.type==="pot"?"selected":""}>Pot (condiment)</option></select></td>
     <td><input data-f="cible" type="number" min="0" value="${esc(i.cible)}"></td>
+    <td><input data-f="cibleWE" type="number" min="0" value="${esc(i.cibleWE||"")}" placeholder="${esc(i.cible)}"></td>
     <td><input data-f="ordre" type="number" value="${esc(i.ordre)}"></td>
     <td style="text-align:center"><input type="checkbox" data-f="actif" ${i.actif!=="non"?"checked":""} style="width:auto"></td>
     <td style="text-align:center"><button class="btn small ghost" data-del="${esc(i.id)}" title="Supprimer">✕</button></td></tr>`;
   const dern=r.dernier;
   $("#main").innerHTML=`<div class="top"><h1 class="grow">Sauces & condiments</h1><span class="saved" id="saved"></span></div>
-  <p class="muted small" style="margin-top:-6px">Le lundi, le mercredi, le jeudi et le samedi au post-service, la tâche « Compter les pipettes de sauce et les pots de condiments » ouvre l'écran de comptage (jours modifiables dans Tâches). L'équipe peut aussi compter n'importe quel jour avec le bouton « 🧴 Compter » en bas des tâches. Pour chaque article sous l'objectif, une tâche « Remplir N … » est créée et reste dans les tâches jusqu'à ce qu'elle soit cochée.</p>
+  <p class="muted small" style="margin-top:-6px">Le lundi, le mercredi, le jeudi et le vendredi au post-service, la tâche « Compter les pipettes de sauce et les pots de condiments » ouvre l'écran de comptage (jours modifiables dans Tâches). L'équipe peut aussi compter n'importe quel jour avec le bouton « 🧴 Compter » en bas des tâches. Le jeudi et le vendredi, on remplit jusqu'à l'objectif week-end pour ne presque rien préparer samedi et dimanche (vide = même objectif). Pour chaque article sous l'objectif, une tâche « Remplir N … » est créée et reste dans les tâches jusqu'à ce qu'elle soit cochée.</p>
   <div style="display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:16px;align-items:start">
-  <div class="card"><div class="scrollx"><table class="t" style="min-width:560px"><colgroup><col><col style="width:160px"><col style="width:90px"><col style="width:70px"><col style="width:60px"><col style="width:50px"></colgroup>
-    <thead><tr><th>Nom</th><th>Type</th><th>Objectif</th><th>Ordre</th><th>Actif</th><th></th></tr></thead><tbody id="tb">${r.items.map(row).join("")||`<tr><td colspan="6" class="muted">Aucun article</td></tr>`}</tbody></table></div>
+  <div class="card"><div class="scrollx"><table class="t" style="min-width:640px"><colgroup><col><col style="width:160px"><col style="width:84px"><col style="width:96px"><col style="width:64px"><col style="width:56px"><col style="width:46px"></colgroup>
+    <thead><tr><th>Nom</th><th>Type</th><th>Objectif</th><th>Objectif jeu./ven. (week-end)</th><th>Ordre</th><th>Actif</th><th></th></tr></thead><tbody id="tb">${r.items.map(row).join("")||`<tr><td colspan="7" class="muted">Aucun article</td></tr>`}</tbody></table></div>
     <div class="row" style="margin-top:10px;gap:8px"><input id="n-nom" placeholder="Nouvelle sauce ou nouveau condiment" style="flex:1"><select id="n-type" style="width:170px"><option value="pipette">Pipette (sauce)</option><option value="pot">Pot (condiment)</option></select><input id="n-cible" type="number" min="0" value="6" style="width:80px" title="Objectif"><button class="btn" id="n-add">Ajouter</button></div></div>
   <div>
     <div class="card"><h3>À remplir en ce moment (${r.ouverts.length})</h3>${r.ouverts.map(o=>`<div class="small" style="padding:4px 0">• ${esc(o.titre)} <span class="muted">· depuis le ${o.creeLe.slice(8,10)}/${o.creeLe.slice(5,7)} ${o.creeLe.slice(11,16)}</span></div>`).join("")||`<p class="muted small">Rien à remplir.</p>`}</div>
