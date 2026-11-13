@@ -218,7 +218,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-14b";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-14c";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -413,7 +413,8 @@ async function vAccueil(){
   <div class="list">${prochains.length?prochains.map(s=>`<div class="item"><span style="width:6px;align-self:stretch;border-radius:3px;background:${esc(poste(s.posteId).couleur)}"></span><div class="t"><div class="a cap">${jourLong(s.date)}</div><div class="b">${s.debut}–${s.fin} · ${esc(poste(s.posteId).nom)}</div></div></div>`).join(""):`<div class="empty">Rien de prévu dans les 2 semaines.</div>`}</div></section>
   <div id="notifcard"></div>
   <button class="btn ghost" id="install">📲 Installer l'appli sur mon téléphone</button>
-  <button class="btn ghost" id="moncode" style="margin-top:8px">🔑 Changer mon code</button>`;
+  <button class="btn ghost" id="moncode" style="margin-top:8px">🔑 Changer mon code</button>
+  <p class="hint" style="text-align:center">version ${APP_VERSION}</p>`;
   bindOut();
   $("#moncode").onclick=()=>codeSheet();
   $("#app").querySelectorAll("[data-pt]").forEach(b=>b.onclick=()=>{
@@ -965,6 +966,7 @@ async function notifCard(){
   let html="";
   if(!("PushManager" in window)||typeof Notification==="undefined"){
     if(IOS&&!STANDALONE)html=`<section class="card soft small notifcard"><span style="font-size:1.4rem">🔔</span><span>Pour recevoir les rappels, ajoute d'abord l'appli à l'écran d'accueil (bouton ci-dessous), puis ouvre-la depuis l'icône.</span></section>`;
+    else html=`<section class="card soft small notifcard"><span style="font-size:1.4rem">🔕</span><span>Ce téléphone ne peut pas recevoir les notifications de l'appli${IOS?" : il faut iOS 16.4 ou plus récent (Réglages › Général › Mise à jour logicielle)":""}.</span></section>`;
   }else if(Notification.permission==="default"||(Notification.permission==="granted"&&!(await pushSub()))){
     html=`<section class="card notifcard"><span style="font-size:1.4rem">🔔</span><span class="grow small">Reçois un rappel pour noter ton arrivée, ton départ et les tâches.</span><button class="btn small" id="notifon">Activer</button></section>`;
   }else if(Notification.permission==="denied"){
