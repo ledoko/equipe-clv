@@ -95,6 +95,9 @@ h2{font-family:var(--display);font-weight:600;font-size:1.1rem;margin:0}
 /* connexion */
 .login{min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:24px 16px}
 .login h1{font-size:1.8rem;text-align:center}
+.pt.warn{color:var(--warn)}
+.ecart{color:var(--warn);font-weight:600}
+.notifcard{display:flex;gap:10px;align-items:center}
 .app.stale{pointer-events:none;opacity:.6;transition:opacity .2s}
 .app.stale::before{content:"Mise à jour…";position:fixed;top:calc(8px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:5;background:var(--surface);color:var(--muted);border:1px solid var(--line);border-radius:99px;padding:3px 12px;font-size:.78rem;opacity:1}
 .login .logo{width:96px;height:96px;border-radius:50%;margin-bottom:-8px;box-shadow:0 6px 18px rgba(0,0,0,.18)}
@@ -208,14 +211,14 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 </head>
 <body>
 <div id="root"></div>
-<script>window.API_URL="https://equipe-clv.equipe-clv.workers.dev/";</script>
+<script>window.API_URL="https://equipe-clv.equipe-clv.workers.dev/";window.VAPID_PUBLIC="BCE-1Ot7AB7aPJFc2Jc8cCHbbTA6kQEMoUwF9MimZOslUbeX-7eZTYCO1I_Y-NWzWiAtNdsj3u89FzG3zcIxIAs";</script>
 <nav class="tabs" id="tabs" hidden><div class="in" id="tabsIn"></div></nav>
 <div class="scrim" id="scrim" hidden><div class="sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
 <div class="toast" id="toast" hidden role="status"></div>
 
 <script>
 (function(){
-const APP_VERSION="2026-11-13e";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-14";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -242,6 +245,11 @@ const ddmm=s=>s?String(s).slice(8,10)+"/"+String(s).slice(5,7):"";
 const moisLabel=m=>new Date(Date.UTC(+m.slice(0,4),+m.slice(5,7)-1,1)).toLocaleDateString("fr-FR",{month:"long",year:"numeric",timeZone:"UTC"});
 const shiftMois=(m,k)=>{const d=new Date(Date.UTC(+m.slice(0,4),+m.slice(5,7)-1+k,1));return d.getUTCFullYear()+"-"+pad(d.getUTCMonth()+1)};
 const plural=(n,w)=>n+" "+w+(n>1?"s":"");
+const ECART_MAX=15;
+const ecart=(h,note)=>h&&note?Math.abs(hm2m(h)-hm2m(String(note).slice(11,16))):0;
+const heureLocale=()=>new Date().toTimeString().slice(0,5);
+const MOMENTS=["Ouverture","Matin","Pré-service","Journée","Post-service","Après-midi","Nettoyage","Fermeture","Gérance"];
+const JOURS_FR=["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"];
 
 let token=null, S=null;   // S = {me, employes, postes, reglages, now}
 let view="accueil", sub=null;
@@ -341,6 +349,7 @@ async function start(){
     S=s;mem.S=s;memEcrire();
     if(autreJour){cache.weeks={};go(view||"accueil")}else tabs();
   });
+  resyncPush();
   if(mem.S){S=mem.S;go(view||"accueil");frais.catch(e=>{if(/code/i.test(e.message))return;toast(e.message,true)});return}
   $("#root").innerHTML=`<div class="spin"></div>`;
   await frais;
@@ -374,7 +383,7 @@ function go(v,s){
 function header(title,subtitle,right){
   return `<header class="top"><div class="grow"><h1>${title}</h1></div>${right||`<div class="who">${esc(S.me.prenom)}<br><button class="btn small ghost" id="out" style="padding:3px 9px;font-size:.78rem">Changer</button></div>`}</header>${subtitle?`<p class="sub">${subtitle}</p>`:""}`;
 }
-function bindOut(){const b=$("#out");if(b)b.onclick=()=>confirmSheet("Changer de personne ?","Tu devras retaper ton code.","Se déconnecter",async()=>{try{await call("deconnexion",{token})}catch(e){}logout()})}
+function bindOut(){const b=$("#out");if(b)b.onclick=()=>confirmSheet("Changer de personne ?","Tu devras retaper ton code.","Se déconnecter",async()=>{try{const sb=await pushSub();if(sb)await call("desabonner",{endpoint:sb.endpoint})}catch(e){}try{await call("deconnexion",{token})}catch(e){}logout()})}
 async function week(l,force){if(force||!cache.weeks[l])cache.weeks[l]=await call("semaine",{date:l});return cache.weeks[l]}
 
 // ---------- accueil ----------
@@ -393,7 +402,7 @@ async function vAccueil(){
   else if(!p||!p.arrivee) hero=`<section class="hero"><div class="lbl">Pointage</div><div class="big">Pas encore pointé</div><div class="hs">${shiftTxt}</div><div class="btns"><button class="btn sun" data-pt="arrivee">J'arrive</button></div></section>`;
   else if(p.depart){const m=hm2m(p.depart)-hm2m(p.arrivee)-(+p.pause||0);hero=`<section class="hero done"><div class="lbl">Journée finie</div><div class="big num">${p.arrivee} → ${p.depart}</div><div class="hs">${dur(m)} travaillées${+p.pause?` · pause ${p.pause} min`:""}</div></section>`}
   else if(p.pauseDebut) hero=`<section class="hero pause"><div class="lbl">En pause depuis</div><div class="big num">${p.pauseDebut}</div><div class="hs">Arrivée à ${p.arrivee}</div><div class="btns"><button class="btn sun" data-pt="pauseFin">Fin de pause</button></div></section>`;
-  else hero=`<section class="hero"><div class="lbl">Au travail depuis</div><div class="big num">${p.arrivee}</div><div class="hs">${shiftTxt}${+p.pause?`<br>Pause déjà prise : ${p.pause} min`:""}</div><div class="btns"><button class="btn" data-pt="pauseDebut">Pause</button><button class="btn sun" data-pt="depart">Je pars</button></div></section>`;
+  else hero=`<section class="hero"><div class="lbl">Au travail depuis</div><div class="big num">${p.arrivee}${ecart(p.arrivee,p.arriveeNotee)>ECART_MAX?`<small style="font-size:.9rem;font-weight:500"> · notée à ${p.arriveeNotee.slice(11,16)}</small>`:""}</div><div class="hs">${shiftTxt}${+p.pause?`<br>Pause déjà prise : ${p.pause} min`:""}</div><div class="btns"><button class="btn" data-pt="pauseDebut">Pause</button><button class="btn sun" data-pt="depart">Je pars</button></div></section>`;
   const alertes=al?`<section class="card"><div class="sechead"><h2>À voir</h2><small>${al.length?plural(al.length,"point"):""}</small></div>${al.length?al.map(a=>`<div class="alert"><i>${{demande:"🌴",pointage:"⏱",commande:"🛒",frequence:"📦",tache:"✅"}[a.type]||"•"}</i><span>${esc(a.txt)}</span></div>`).join(""):`<p class="hint">Rien à signaler.</p>`}</section>`:"";
   $("#app").innerHTML=`${header("Bonjour "+esc(S.me.prenom),jourLong(t))}
   ${IN_APP?`<section class="inapp"><p><b>Ouvre l'appli dans ton vrai navigateur</b></p><p>Tu es dans le navigateur d'une autre appli : ta connexion risque de ne pas être gardée.</p><button class="btn small" id="inappHow">Comment faire ?</button></section>`:""}
@@ -402,15 +411,17 @@ async function vAccueil(){
   <section class="card" id="tsum"><div class="sechead"><h2>Tâches du jour</h2><small id="tcount">…</small></div><div class="prog"><i id="tprog" style="width:0%"></i></div><button class="btn ghost" id="gotasks">Voir les tâches</button></section>
   <section class="sec"><div class="sechead"><h2>Mes prochains postes</h2></div>
   <div class="list">${prochains.length?prochains.map(s=>`<div class="item"><span style="width:6px;align-self:stretch;border-radius:3px;background:${esc(poste(s.posteId).couleur)}"></span><div class="t"><div class="a cap">${jourLong(s.date)}</div><div class="b">${s.debut}–${s.fin} · ${esc(poste(s.posteId).nom)}</div></div></div>`).join(""):`<div class="empty">Rien de prévu dans les 2 semaines.</div>`}</div></section>
+  <div id="notifcard"></div>
   <button class="btn ghost" id="install">📲 Installer l'appli sur mon téléphone</button>
   <button class="btn ghost" id="moncode" style="margin-top:8px">🔑 Changer mon code</button>`;
   bindOut();
   $("#moncode").onclick=()=>codeSheet();
   $("#app").querySelectorAll("[data-pt]").forEach(b=>b.onclick=()=>{
-    const type=b.dataset.pt, now=new Date().toTimeString().slice(0,5);
-    const go2=async()=>{await act(()=>call("pointer",{type}),{arrivee:"Arrivée notée",pauseDebut:"Bonne pause !",pauseFin:"Fin de pause notée",depart:"Départ noté. Bonne soirée !"}[type]);go("accueil")};
-    if(type==="depart")confirmSheet("Noter ton départ ?","L'heure du serveur sera enregistrée (vers "+now+").","Oui, je pars",go2);else go2();
+    const type=b.dataset.pt;
+    const go2=async heure=>{await act(()=>call("pointer",{type,heure}),{arrivee:"Arrivée notée",pauseDebut:"Bonne pause !",pauseFin:"Fin de pause notée",depart:"Départ noté. Bonne soirée !"}[type]);go("accueil")};
+    if(type==="arrivee"||type==="depart")heureSheet(type,go2);else go2();
   });
+  notifCard();
   $("#gotasks").onclick=()=>go("taches");
   $("#install").onclick=()=>installSheet();
   const ih=$("#inappHow");if(ih)ih.onclick=()=>installSheet();
@@ -433,7 +444,7 @@ async function vPlanning(){
       sh.map(s=>{
         const p=admin&&w.pointages.find(x=>x.empId===s.empId&&x.date===d);
         let pt="";
-        if(admin&&d<=t&&d>=(S.reglages.debutPointage||"")){pt=p&&p.arrivee?`<div class="pt ok">⏱ ${p.arrivee}–${p.depart||"…"}${p.pause?` · pause ${p.pause}`:""}${p.corrigePar?" · corrigé":""}</div>`:(d<t?`<div class="pt no">⏱ pas pointé</div>`:"")}
+        if(admin&&d<=t&&d>=(S.reglages.debutPointage||"")){const ec=!p||p.corrigePar?0:Math.max(ecart(p.arrivee,p.arriveeNotee),ecart(p.depart,p.departNotee));pt=p&&p.arrivee?`<div class="pt ${ec>ECART_MAX?"warn":"ok"}">⏱ ${p.arrivee}–${p.depart||"…"}${p.pause?` · pause ${p.pause}`:""}${p.corrigePar?" · corrigé":""}${ec>ECART_MAX?" · ⚠ noté en décalé":""}</div>`:(d<t?`<div class="pt no">⏱ pas pointé</div>`:"")}
         return `<button class="shift ${s.empId===me?"mine":""}" style="--c:${esc(poste(s.posteId).couleur)}" data-sid="${esc(s.id)}"><span class="h">${s.debut}–${s.fin}</span><span class="n">${esc(empName(s.empId))}</span><span class="p">${esc(poste(s.posteId).nom)}${+s.pause?` · pause ${s.pause} min`:""}${s.note?` · ${esc(s.note)}`:""}</span>${pt}</button>`;
       }).join("");
     return `<div class="day ${d===t?"today":""}"><div class="dh"><b>${jourCourt(d)}</b><small>${tot?dur(tot)+" · "+sh.length+" 👤":""}</small></div>${cards||`<div class="dayempty">${mode==="moi"?"Pas de poste":"Personne"}</div>`}${admin?`<button class="addday" data-add="${d}">+ Ajouter</button>`:""}</div>`;
@@ -470,7 +481,7 @@ function shiftSheet(s,w){
   <p class="err" id="f-err" hidden></p>
   <div class="actions">${isNew?"":`<button class="btn bad" id="f-del">Supprimer</button>`}<button class="btn" id="f-ok">Enregistrer</button></div>
   ${isNew||d>today()?"":`<hr style="border:0;border-top:1px solid var(--line);width:100%">
-  <h3 style="font-size:1.1rem">Heures réelles</h3><p class="hint">${p&&p.arrivee?"Pointé par "+esc(empName(s.empId))+(p.corrigePar?" · corrigé par "+esc(p.corrigePar):""):"Pas de pointage : les heures prévues comptent dans le rapport."}</p>
+  <h3 style="font-size:1.1rem">Heures réelles</h3>${p&&(p.arriveeNotee||p.departNotee)?`<p class="hint">${p.arriveeNotee?`Arrivée ${p.arrivee} notée à ${p.arriveeNotee.slice(11,16)}`:""}${p.departNotee?` · départ ${p.depart} noté à ${p.departNotee.slice(11,16)}`:""}</p>`:""}<p class="hint">${p&&p.arrivee?"Pointé par "+esc(empName(s.empId))+(p.corrigePar?" · corrigé par "+esc(p.corrigePar):""):"Pas de pointage : les heures prévues comptent dans le rapport."}</p>
   <div class="grid3"><label class="f">Arrivée<input id="p-arr" type="time" value="${esc(p&&p.arrivee||"")}"></label><label class="f">Départ<input id="p-dep" type="time" value="${esc(p&&p.depart||"")}"></label><label class="f">Pause (min)<input id="p-pau" type="number" inputmode="numeric" min="0" placeholder="${esc(s.pause||"0")}" value="${esc(p&&p.pause||"")}"></label></div>
   <button class="btn ghost" id="p-ok">Corriger le pointage</button>`}`,()=>{
     const err=m=>{$("#f-err").hidden=false;$("#f-err").textContent=m};
@@ -525,8 +536,10 @@ async function vTaches(){
   <div class="nav"><button class="icon" id="dprev" aria-label="Jour précédent">‹</button><b class="cap">${d===today()?"Aujourd'hui · ":""}${jourCourt(d)} ${dt(d,{month:"short"})}</b><button class="icon" id="dnext" aria-label="Jour suivant" ${d>=today()?"disabled":""}>›</button></div>
   <div class="card"><div class="sechead"><h2>${f} / ${n} faites</h2><label class="small muted row" style="gap:6px"><input type="checkbox" id="cacher" style="width:auto" ${cacher?"checked":""}> Cacher les faites</label></div><div class="prog"><i style="width:${n?f/n*100:0}%"></i></div></div>
   <div class="chips"><button class="chip" data-f="tout" aria-pressed="${filtre==="tout"}">Tout</button>${moments.map(m=>`<button class="chip" data-f="${esc(m)}" aria-pressed="${filtre===m}">${esc(m)}</button>`).join("")}</div>
-  <div class="list" id="tl">${html||`<div class="empty">${cacher&&n?"Tout est fait 🎉":"Aucune tâche"}</div>`}</div>`;
+  <div class="list" id="tl">${html||`<div class="empty">${cacher&&n?"Tout est fait 🎉":"Aucune tâche"}</div>`}</div>
+  <button class="btn ghost" id="sugg">💡 Suggérer une tâche</button>`;
   bindOut();
+  $("#sugg").onclick=()=>suggestionSheet(filtre!=="tout"?filtre:"");
   const setSub=o=>{sub=Object.assign({date:d,filtre,cacher},o);go("taches")};
   $("#dprev").onclick=()=>setSub({date:addDays(d,-1)});
   $("#dnext").onclick=()=>{if(d<today())setSub({date:addDays(d,1)})};
@@ -637,7 +650,10 @@ async function vGerer(){
   if(s==="equipe")return gEquipe();
   if(s==="articles")return gArticles();
   if(s==="fournisseurs")return gFournisseurs();
-  const items=[["commandes","🛒","Commandes","Ce qu'il faut commander, fréquences des fournisseurs"],["rapport","🧾","Rapport du mois","Heures et heures sup pour Proxima"],["equipe","👥","Équipe et codes","Ajouter une personne, refaire un code"],["articles","📦","Articles de l'inventaire","Seuils mini et quantités à commander"],["fournisseurs","🚚","Fournisseurs","Marchandise ou frais généraux, email"]];
+  if(s==="jour")return gJour();
+  if(s==="taches")return gTaches();
+  if(s==="suggestions")return gSuggestions();
+  const items=[["jour","📋","Rapport du jour","Qui a fait quelle tâche et à quelle heure, arrivées et départs"],["suggestions","💡","Suggestions de tâches","Les idées de l'équipe, à accepter ou refuser"],["taches","✅","Tâches","Ajouter, modifier ou retirer une tâche"],["commandes","🛒","Commandes","Ce qu'il faut commander, fréquences des fournisseurs"],["rapport","🧾","Rapport du mois","Heures et heures sup pour Proxima"],["equipe","👥","Équipe et codes","Ajouter une personne, refaire un code"],["articles","📦","Articles de l'inventaire","Seuils mini et quantités à commander"],["fournisseurs","🚚","Fournisseurs","Marchandise ou frais généraux, email"]];
   $("#app").innerHTML=`${header("Gérer")}
   <div class="list">${items.map(([k,i,a,b])=>`<button class="item" data-p="${k}"><span style="font-size:1.4rem">${i}</span><div class="t"><div class="a">${a}</div><div class="b">${b}</div></div><span class="muted">›</span></button>`).join("")}</div>
   <button class="btn ghost" id="install">📲 Lien de l'appli et installation</button>
@@ -725,6 +741,7 @@ async function gRapport(){
     <div class="scrollx"><table class="rep"><thead><tr><th>Salarié</th><th>Heures</th><th>Jours</th><th>HS 25 %</th><th>HS 50 %</th><th>H. compl.</th><th>Repos / absences</th></tr></thead>
     <tbody>${L.map(l=>`<tr><td>${esc(l.nom)}</td><td>${dec(l.minMois)}</td><td>${l.jours}</td><td><b>${dec(l.hs25)}</b></td><td><b>${dec(l.hs50)}</b></td><td>${dec(l.comp)}</td><td>${esc(reposTxt(l.repos))}</td></tr>`).join("")||`<tr><td colspan="7" class="muted">Aucune heure ce mois-ci</td></tr>`}</tbody></table></div>
     <p class="hint small">Heures en décimal (7,50 = 7 h 30), pauses non payées déduites. Heures sup calculées par semaine du lundi au dimanche au-delà de 39 h : +25 % de la 40ᵉ à la 47ᵉ heure, +50 % au-delà. Semaines comptées dans ce mois (celles qui finissent dans le mois) : ${esc(sem)}.</p>
+    ${L.some(l=>l.ecarts&&l.ecarts.length)?`<div class="card soft small"><b>Heures notées en décalé (plus de ${ECART_MAX} min après coup)</b>${L.filter(l=>l.ecarts&&l.ecarts.length).map(l=>`<div>${esc(l.nom)} : ${l.ecarts.map(ddmm).join(", ")}</div>`).join("")}<div class="muted">L'employé a choisi son heure ; vérifie-la dans Planning (touche le poste) ou Gérer › Rapport du jour.</div></div>`:""}
     ${L.some(l=>l.prevus.length||l.incomplets.length)?`<div class="card soft small"><b>À vérifier avant d'envoyer</b>${L.filter(l=>l.prevus.length||l.incomplets.length).map(l=>`<div>${esc(l.nom)} : ${l.prevus.length?plural(l.prevus.length,"jour")+" sans pointage (heures prévues utilisées)":""}${l.prevus.length&&l.incomplets.length?" · ":""}${l.incomplets.length?plural(l.incomplets.length,"départ")+" non pointé"+(l.incomplets.length>1?"s":""):""}</div>`).join("")}<div class="muted">Corrige dans Planning (touche le poste › Heures réelles).</div></div>`:""}
     <details><summary class="small">Détail par semaine</summary><div class="scrollx"><table class="rep"><thead><tr><th>Salarié</th>${r.semaines.map(l=>`<th>${ddmm(l)}</th>`).join("")}</tr></thead><tbody>${L.map(l=>`<tr><td>${esc(l.nom)}</td>${l.semaines.map(s=>`<td>${dur(s.min)}${s.hs25||s.hs50?`<br><small class="muted">+${dec(s.hs25+s.hs50)} HS</small>`:""}</td>`).join("")}</tr>`).join("")}</tbody></table></div></details>
   </div>
@@ -817,6 +834,147 @@ function open(html,onMount,locked){const sh=$("#sheet");sh.dataset.locked=locked
 function close(){$("#scrim").hidden=true;$("#sheet").innerHTML=""}
 $("#scrim").addEventListener("click",e=>{if(e.target.id==="scrim"&&!$("#sheet").dataset.locked)close()});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("#scrim").hidden&&!$("#sheet").dataset.locked)close()});
+// ---------- heure d'arrivée / de départ choisie par l'employé
+function heureSheet(type,fn){
+  const arr=type==="arrivee";
+  open(`<h3>${arr?"Noter mon arrivée":"Noter mon départ"}</h3>
+  <label class="f">Heure ${arr?"d'arrivée":"de départ"}<input id="h-v" type="time" value="${heureLocale()}"></label>
+  <p class="hint">Mets l'heure réelle${arr?" à laquelle tu as commencé":" à laquelle tu as fini"}. L'appli garde aussi l'heure à laquelle tu la notes.</p>
+  <div class="actions"><button class="btn ghost" id="h-no">Annuler</button><button class="btn" id="h-ok">${arr?"J'arrive":"Je pars"}</button></div>`,()=>{
+    $("#h-no").onclick=close;
+    $("#h-ok").onclick=async()=>{const v=$("#h-v").value;if(!/^\d{2}:\d{2}$/.test(v)){toast("Choisis une heure",true);return}$("#h-ok").disabled=true;close();try{await fn(v)}catch(e){}};
+  });
+}
+
+// ---------- suggestions de tâches
+function suggestionSheet(moment){
+  open(`<h3>Suggérer une tâche</h3><p class="hint">David la verra et pourra l'ajouter à la liste.</p>
+  <label class="f">La tâche<input id="sg-t" maxlength="200" placeholder="Ex. : nettoyer la vitrine à gâteaux"></label>
+  <div class="grid2"><label class="f">Moment<select id="sg-m">${MOMENTS.filter(m=>m!=="Gérance").map(m=>`<option ${m===moment?"selected":""}>${m}</option>`).join("")}</select></label>
+  <label class="f">Quand<select id="sg-f"><option value="jour">Chaque jour</option><option value="semaine">Chaque semaine</option><option value="mois">Chaque mois</option></select></label></div>
+  <label class="f">Détails (facultatif)<input id="sg-n" maxlength="500" placeholder="Comment, avec quel produit…"></label>
+  <div class="actions"><button class="btn ghost" id="sg-no">Annuler</button><button class="btn" id="sg-ok">Envoyer</button></div>`,()=>{
+    $("#sg-no").onclick=close;
+    $("#sg-ok").onclick=async()=>{$("#sg-ok").disabled=true;try{await act(()=>call("suggestionCreer",{titre:$("#sg-t").value,moment:$("#sg-m").value,freq:$("#sg-f").value,note:$("#sg-n").value}),"Merci ! Suggestion envoyée");close()}catch(e){$("#sg-ok").disabled=false}};
+  });
+}
+
+// ---------- Gérer › Rapport du jour
+async function gJour(){
+  const d=sub&&sub.date||today();
+  const r=await call("rapportJour",{date:d});
+  const h=(v,note,ec)=>v?`${v}${ec>r.ecartMax?` <span class="ecart">⚠ notée à ${note}</span>`:""}`:`<span class="muted">—</span>`;
+  const parMoment={};r.pasFaites.forEach(x=>(parMoment[x.moment]=parMoment[x.moment]||[]).push(x));
+  $("#app").innerHTML=`${backHead("Rapport du jour")}
+  <div class="nav"><button class="icon" id="dprev">‹</button><b class="cap">${d===today()?"Aujourd'hui · ":""}${jourLong(d)}</b><button class="icon" id="dnext" ${d>=today()?"disabled":""}>›</button></div>
+  <section class="card"><div class="sechead"><h2>Arrivées et départs</h2></div>
+  ${r.personnes.length?`<div class="scrollx"><table class="rep"><thead><tr><th>Qui</th><th>Prévu</th><th>Arrivée</th><th>Départ</th><th>Pause</th></tr></thead><tbody>${r.personnes.map(p=>`<tr><td>${esc(p.prenom)}${p.corrige?` <small class="muted">corrigé</small>`:""}</td><td>${esc(p.prevu||"—")}</td><td>${h(p.arrivee,p.arriveeNotee,p.corrige?0:p.ecartArrivee)}</td><td>${h(p.depart,p.departNotee,p.corrige?0:p.ecartDepart)}</td><td>${p.pause?p.pause+" min":"—"}</td></tr>`).join("")}</tbody></table></div>`:`<p class="hint">Personne au planning ce jour-là.</p>`}
+  <p class="hint small">⚠ = l'heure a été notée plus de ${r.ecartMax} min après coup (ou avant).</p></section>
+  <section class="card"><div class="sechead"><h2>Tâches faites</h2><small>${r.faites.length}</small></div>
+  ${r.faites.length?`<div class="list">${r.faites.map(f=>`<div class="item"><b class="num" style="min-width:3.2em">${f.heure}</b><div class="t"><div class="a">${esc(f.titre)}</div><div class="b">${esc(f.par)} · ${esc(f.moment)}${f.freq!=="jour"?" · "+(f.freq==="semaine"?"hebdo":"mensuel"):""}</div></div></div>`).join("")}</div>`:`<p class="hint">Aucune tâche cochée.</p>`}</section>
+  <section class="card"><div class="sechead"><h2>Pas faites</h2><small>${r.pasFaites.length}</small></div>
+  ${r.pasFaites.length?Object.keys(parMoment).map(m=>`<div class="grp">${esc(m)}</div>${parMoment[m].map(x=>`<div class="small" style="padding:3px 0">• ${esc(x.titre)}${x.freq!=="jour"?` <span class="pill ${x.retard?"no":"info"}">${x.freq==="semaine"?"Hebdo":"Mensuel"}</span>`:""}</div>`).join("")}`).join(""):`<p class="hint">Tout est fait 🎉</p>`}</section>
+  <p class="hint">Ce rapport t'arrive aussi chaque soir à 21 h par mail.</p>`;
+  bindBack();
+  const setSub=x=>{sub={page:"jour",date:x};go("gerer")};
+  $("#dprev").onclick=()=>setSub(addDays(d,-1));
+  $("#dnext").onclick=()=>{if(d<today())setSub(addDays(d,1))};
+}
+
+// ---------- Gérer › Tâches
+function tacheSheet(x,onSave){
+  x=x||{freq:"jour",moment:"Ouverture",actif:"oui"};
+  const moms=[...new Set([...MOMENTS,x.moment].filter(Boolean))];
+  open(`<h3>${x.id?"Modifier la tâche":"Nouvelle tâche"}</h3>
+  <label class="f">Tâche<input id="k-t" value="${esc(x.titre||"")}"></label>
+  <label class="f">Détails<input id="k-n" value="${esc(x.note||"")}"></label>
+  <div class="grid2"><label class="f">Moment<select id="k-m">${moms.map(m=>`<option ${m===x.moment?"selected":""}>${esc(m)}</option>`).join("")}</select></label>
+  <label class="f">Fréquence<select id="k-f">${[["jour","Chaque jour"],["semaine","Chaque semaine"],["mois","Chaque mois"]].map(([v,l])=>`<option value="${v}" ${v===x.freq?"selected":""}>${l}</option>`).join("")}</select></label></div>
+  <label class="f" id="k-jw">Jour de la semaine<select id="k-j">${JOURS_FR.map((j,i)=>`<option value="${i+1}" ${String(i+1)===String(x.jour)?"selected":""}>${j}</option>`).join("")}</select></label>
+  <label class="f" id="k-rw">Quel jour du mois<input id="k-r" value="${esc(x.repere||"1er lundi")}" placeholder="1er lundi, 2e mercredi…"></label>
+  <div class="grid2"><label class="f">Rubrique (facultatif)<input id="k-s" value="${esc(x.section||"")}"></label>
+  <label class="f">Active<select id="k-a"><option value="oui" ${x.actif!=="non"?"selected":""}>Oui</option><option value="non" ${x.actif==="non"?"selected":""}>Non (retirée)</option></select></label></div>
+  <div class="actions"><button class="btn ghost" id="k-no">Annuler</button><button class="btn" id="k-ok">Enregistrer</button></div>`,()=>{
+    const maj=()=>{const f=$("#k-f").value;$("#k-jw").hidden=f!=="semaine";$("#k-rw").hidden=f!=="mois"};maj();
+    $("#k-f").onchange=maj;
+    $("#k-no").onclick=close;
+    $("#k-ok").onclick=async()=>{
+      const f=$("#k-f").value;
+      const data={id:x.id,titre:$("#k-t").value,note:$("#k-n").value,moment:$("#k-m").value,freq:f,jour:f==="semaine"?$("#k-j").value:"",repere:f==="mois"?$("#k-r").value:"",section:$("#k-s").value,actif:$("#k-a").value};
+      $("#k-ok").disabled=true;
+      try{await onSave(data);close()}catch(e){toast(e.message,true);$("#k-ok").disabled=false}
+    };
+  });
+}
+async function gTaches(){
+  const list=await call("tachesAdmin"), voir=sub&&sub.voir||"jour";
+  const vis=list.filter(t=>voir==="retirees"?t.actif==="non":t.actif!=="non"&&t.freq===voir);
+  let html="",cur=null;
+  vis.forEach(t=>{
+    if(t.moment!==cur){cur=t.moment;html+=`<div class="grp">${esc(t.moment||"Autres")}</div>`}
+    const quand=t.freq==="semaine"?JOURS_FR[(+t.jour||1)-1]:t.freq==="mois"?t.repere:"";
+    html+=`<button class="item" data-k="${esc(t.id)}"><div class="t"><div class="a">${esc(t.titre)}</div><div class="b">${quand?esc(quand)+" · ":""}${esc(t.section||"")}${t.note?" · "+esc(t.note.slice(0,60)):""}</div></div><span class="muted">›</span></button>`;
+  });
+  $("#app").innerHTML=`${backHead("Tâches")}
+  <div class="chips">${[["jour","Chaque jour"],["semaine","Hebdo"],["mois","Mensuel"],["retirees","Retirées"]].map(([k,l])=>`<button class="chip" data-v2="${k}" aria-pressed="${voir===k}">${l}</button>`).join("")}</div>
+  <button class="btn" id="knew">+ Nouvelle tâche</button>
+  <div class="list">${html||`<div class="empty">Aucune tâche</div>`}</div>`;
+  bindBack();
+  $("#app").querySelectorAll("[data-v2]").forEach(b=>b.onclick=()=>{sub={page:"taches",voir:b.dataset.v2};go("gerer")});
+  const save=async data=>{await call("tacheSave",data);toast("Enregistré");go("gerer")};
+  $("#knew").onclick=()=>tacheSheet(null,save);
+  $("#app").querySelectorAll("[data-k]").forEach(b=>b.onclick=()=>tacheSheet(list.find(t=>t.id===b.dataset.k),save));
+}
+
+// ---------- Gérer › Suggestions
+async function gSuggestions(){
+  const list=await call("suggestions");
+  const att=list.filter(x=>x.statut==="attente"), autres=list.filter(x=>x.statut!=="attente").slice(0,30);
+  const freqTxt={jour:"chaque jour",semaine:"chaque semaine",mois:"chaque mois"};
+  $("#app").innerHTML=`${backHead("Suggestions de tâches")}
+  <div class="list">${att.map(x=>`<div class="card"><div class="a"><b>${esc(x.titre)}</b></div><div class="small muted">${esc(x.par)} · ${esc(x.moment||"—")} · ${freqTxt[x.freq]||""} · ${ddmm(x.creeLe)}</div>${x.note?`<p class="small">${esc(x.note)}</p>`:""}<div class="actions"><button class="btn ghost" data-no="${esc(x.id)}">Refuser</button><button class="btn" data-ok="${esc(x.id)}">Ajouter à la liste</button></div></div>`).join("")||`<div class="empty">Aucune suggestion en attente.</div>`}</div>
+  ${autres.length?`<div class="grp">Déjà traitées</div><div class="list">${autres.map(x=>`<div class="item"><div class="t"><div class="a">${esc(x.titre)}</div><div class="b">${esc(x.par)} · ${x.statut==="acceptee"?"ajoutée":"refusée"} le ${ddmm(x.traiteLe)}</div></div></div>`).join("")}</div>`:""}`;
+  bindBack();
+  $("#app").querySelectorAll("[data-ok]").forEach(b=>b.onclick=()=>{const x=list.find(y=>y.id===b.dataset.ok);
+    tacheSheet({titre:x.titre,note:x.note,moment:x.moment||"Journée",freq:x.freq,jour:"1",actif:"oui"},async t=>{await call("suggestionRepondre",{id:x.id,statut:"acceptee",tache:t});toast("Ajoutée à la liste");go("gerer")})});
+  $("#app").querySelectorAll("[data-no]").forEach(b=>b.onclick=()=>confirmSheet("Refuser cette suggestion ?","","Refuser",async()=>{await act(()=>call("suggestionRepondre",{id:b.dataset.no,statut:"refusee"}),"Refusée");go("gerer")}));
+}
+
+// ---------- notifications push (version hébergée seulement)
+const PUSH_OK=!!(API_URL&&window.VAPID_PUBLIC&&"serviceWorker" in navigator);
+const STANDALONE=window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches||navigator.standalone===true;
+let swReg=null;
+if(PUSH_OK){try{navigator.serviceWorker.register("sw.js").then(r=>{swReg=r}).catch(()=>{})}catch(e){}}
+function b64u(s){s=s.replace(/-/g,"+").replace(/_/g,"/");s+="===".slice((s.length+3)%4);const b=atob(s),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u}
+async function pushSub(){if(!PUSH_OK||!("PushManager" in window))return null;const r=swReg||await navigator.serviceWorker.ready;return r.pushManager.getSubscription()}
+function appareil(){return IOS?"iPhone":ANDROID?"Android":"Ordinateur"}
+async function resyncPush(){try{if(!PUSH_OK||typeof Notification==="undefined"||Notification.permission!=="granted")return;const sb=await pushSub();if(sb)call("abonner",Object.assign(sb.toJSON(),{appareil:appareil()})).catch(()=>{})}catch(e){}}
+async function activerNotifs(){
+  const perm=await Notification.requestPermission();
+  if(perm!=="granted"){toast("Notifications refusées : tu peux les autoriser dans les réglages du téléphone",true);return false}
+  const r=swReg||await navigator.serviceWorker.ready;
+  let sb=await r.pushManager.getSubscription();
+  if(!sb)sb=await r.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64u(window.VAPID_PUBLIC)});
+  await call("abonner",Object.assign(sb.toJSON(),{appareil:appareil()}));
+  await call("notifTest");
+  toast("Notifications activées 👍");
+  return true;
+}
+async function notifCard(){
+  const box=$("#notifcard");if(!box||!PUSH_OK)return;
+  let html="";
+  if(!("PushManager" in window)||typeof Notification==="undefined"){
+    if(IOS&&!STANDALONE)html=`<section class="card soft small notifcard"><span style="font-size:1.4rem">🔔</span><span>Pour recevoir les rappels, ajoute d'abord l'appli à l'écran d'accueil (bouton ci-dessous), puis ouvre-la depuis l'icône.</span></section>`;
+  }else if(Notification.permission==="default"||(Notification.permission==="granted"&&!(await pushSub()))){
+    html=`<section class="card notifcard"><span style="font-size:1.4rem">🔔</span><span class="grow small">Reçois un rappel pour noter ton arrivée, ton départ et les tâches.</span><button class="btn small" id="notifon">Activer</button></section>`;
+  }else if(Notification.permission==="denied"){
+    html=`<section class="card soft small notifcard"><span style="font-size:1.4rem">🔕</span><span>Notifications bloquées : autorise-les pour cette appli dans les réglages du téléphone.</span></section>`;
+  }
+  if(!$("#notifcard"))return;
+  $("#notifcard").innerHTML=html;
+  const b=$("#notifon");if(b)b.onclick=async()=>{b.disabled=true;try{if(await activerNotifs())$("#notifcard").innerHTML=""}catch(e){toast(e.message||"Impossible d'activer les notifications",true)}b.disabled=false};
+}
+
 function confirmSheet(title,text,label,fn){
   open(`<h3>${esc(title)}</h3>${text?`<p class="hint">${esc(text)}</p>`:""}<div class="actions"><button class="btn ghost" id="c-no">Annuler</button><button class="btn" id="c-yes">${esc(label)}</button></div>`,()=>{
     $("#c-no").onclick=close;
