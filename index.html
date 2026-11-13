@@ -218,7 +218,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-14c";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-14d";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -308,7 +308,11 @@ async function act(fn,okMsg){try{const r=await fn();if(okMsg)toast(okMsg);return
 const today=()=>S.now.date;
 const empName=id=>{const e=S.employes.find(x=>x.id===id);return e?e.prenom:"?"};
 const poste=id=>S.postes.find(p=>p.id===id)||{nom:"",couleur:"var(--line)"};
-const isAdmin=()=>S&&S.me.role==="admin";
+// « Vue employé » : David voit l'appli comme l'équipe (affichage seulement, son compte reste admin)
+let vueEmp=false;try{vueEmp=localStorage.getItem("equipe-clv-vue-employe")==="1"}catch(e){}
+const vraiAdmin=()=>S&&S.me.role==="admin";
+const isAdmin=()=>vraiAdmin()&&!vueEmp;
+function setVueEmp(v){vueEmp=v;try{localStorage.setItem("equipe-clv-vue-employe",v?"1":"0")}catch(e){}sub=null;go(v?"accueil":"gerer")}
 
 // ---------- connexion ----------
 function loginView(err){
@@ -369,7 +373,7 @@ function go(v,s){
   view=v; if(s!==undefined)sub=s;
   close(); window.scrollTo(0,0);
   tabs();
-  const r=$("#root"), cle=v+"|"+(sub||"")+"|"+S.me.id, vues=mem.vues||(mem.vues={}), vu=vues[cle];
+  const r=$("#root"), cle=v+"|"+(sub?JSON.stringify(sub):"")+"|"+S.me.id+(vueEmp?"|emp":""), vues=mem.vues||(mem.vues={}), vu=vues[cle];
   r.innerHTML=vu?`<div class="app stale" id="app">${vu}</div>`:`<div class="app" id="app"><div class="spin"></div></div>`;
   const tour=go.tour=(go.tour||0)+1;
   const fn={accueil:vAccueil,planning:vPlanning,taches:vTaches,inventaire:vInventaire,repos:vRepos,gerer:vGerer}[v]||vAccueil;
@@ -381,9 +385,9 @@ function go(v,s){
   }).catch(e=>{if(view!==v)return;const app=$("#app");if(!app)return;app.classList.remove("stale");app.innerHTML=`<div class="card"><b>Oups</b><p class="hint">${esc(e.message)}</p><button class="btn" id="retry">Réessayer</button></div>`;const b=$("#retry");if(b)b.onclick=()=>go(v)});
 }
 function header(title,subtitle,right){
-  return `<header class="top"><div class="grow"><h1>${title}</h1></div>${right||`<div class="who">${esc(S.me.prenom)}<br><button class="btn small ghost" id="out" style="padding:3px 9px;font-size:.78rem">Changer</button></div>`}</header>${subtitle?`<p class="sub">${subtitle}</p>`:""}`;
+  return `${vraiAdmin()&&vueEmp?`<div class="card soft small row" style="gap:8px;align-items:center"><span class="grow">👀 <b>Vue employé</b> : tu vois l'appli comme l'équipe.</span><button class="btn small" id="vuedavid">Revenir à ma vue</button></div>`:""}<header class="top"><div class="grow"><h1>${title}</h1></div>${right||`<div class="who">${esc(S.me.prenom)}<br><button class="btn small ghost" id="out" style="padding:3px 9px;font-size:.78rem">Changer</button></div>`}</header>${subtitle?`<p class="sub">${subtitle}</p>`:""}`;
 }
-function bindOut(){const b=$("#out");if(b)b.onclick=()=>confirmSheet("Changer de personne ?","Tu devras retaper ton code.","Se déconnecter",async()=>{try{const sb=await pushSub();if(sb)await call("desabonner",{endpoint:sb.endpoint})}catch(e){}try{await call("deconnexion",{token})}catch(e){}logout()})}
+function bindOut(){const vd=$("#vuedavid");if(vd)vd.onclick=()=>setVueEmp(false);const b=$("#out");if(b)b.onclick=()=>confirmSheet("Changer de personne ?","Tu devras retaper ton code.","Se déconnecter",async()=>{try{const sb=await pushSub();if(sb)await call("desabonner",{endpoint:sb.endpoint})}catch(e){}try{await call("deconnexion",{token})}catch(e){}logout()})}
 async function week(l,force){if(force||!cache.weeks[l])cache.weeks[l]=await call("semaine",{date:l});return cache.weeks[l]}
 
 // ---------- accueil ----------
@@ -426,7 +430,7 @@ async function vAccueil(){
   $("#gotasks").onclick=()=>go("taches");
   $("#install").onclick=()=>installSheet();
   const ih=$("#inappHow");if(ih)ih.onclick=()=>installSheet();
-  call("taches",{date:t}).then(r=>{if(view!=="accueil"||!$("#tcount"))return;const n=r.taches.length,f=r.taches.filter(x=>x.fait).length;$("#tcount").textContent=f+" / "+n+" faites";$("#tprog").style.width=(n?f/n*100:0)+"%"}).catch(()=>{});
+  call("taches",{date:t}).then(r=>{if(view!=="accueil"||!$("#tcount"))return;const tl=r.taches.filter(x=>!(vueEmp&&x.qui==="Gérance")),n=tl.length,f=tl.filter(x=>x.fait).length;$("#tcount").textContent=f+" / "+n+" faites";$("#tprog").style.width=(n?f/n*100:0)+"%"}).catch(()=>{});
 }
 
 // ---------- planning ----------
@@ -519,7 +523,7 @@ async function semaineTypeSheet(){
 async function vTaches(){
   const d=sub&&sub.date||today(), filtre=sub&&sub.filtre||"tout", cacher=!!(sub&&sub.cacher);
   const r=await call("taches",{date:d});
-  const list=r.taches;
+  const list=r.taches.filter(x=>!(vueEmp&&x.qui==="Gérance"));
   const moments=[...new Set(list.map(x=>x.moment))];
   const vis=list.filter(x=>(filtre==="tout"||x.moment===filtre)&&!(cacher&&x.fait));
   const n=list.length,f=list.filter(x=>x.fait).length;
@@ -657,10 +661,12 @@ async function vGerer(){
   const items=[["jour","📋","Rapport du jour","Qui a fait quelle tâche et à quelle heure, arrivées et départs"],["suggestions","💡","Suggestions de tâches","Les idées de l'équipe, à accepter ou refuser"],["taches","✅","Tâches","Ajouter, modifier ou retirer une tâche"],["commandes","🛒","Commandes","Ce qu'il faut commander, fréquences des fournisseurs"],["rapport","🧾","Rapport du mois","Heures et heures sup pour Proxima"],["equipe","👥","Équipe et codes","Ajouter une personne, refaire un code"],["articles","📦","Articles de l'inventaire","Seuils mini et quantités à commander"],["fournisseurs","🚚","Fournisseurs","Marchandise ou frais généraux, email"]];
   $("#app").innerHTML=`${header("Gérer")}
   <div class="list">${items.map(([k,i,a,b])=>`<button class="item" data-p="${k}"><span style="font-size:1.4rem">${i}</span><div class="t"><div class="a">${a}</div><div class="b">${b}</div></div><span class="muted">›</span></button>`).join("")}</div>
+  <button class="btn ghost" id="vueemp">👀 Voir l'appli comme un employé</button>
   <button class="btn ghost" id="install">📲 Lien de l'appli et installation</button>
   <p class="hint" style="text-align:center">Équipe CLV · version ${APP_VERSION} · serveur ${esc(S.version)}${IS_GAS||API_URL?"":" · mode test (PC)"}</p>`;
   bindOut();
   $("#app").querySelectorAll("[data-p]").forEach(b=>b.onclick=()=>go("gerer",{page:b.dataset.p}));
+  $("#vueemp").onclick=()=>setVueEmp(true);
   $("#install").onclick=()=>installSheet();
 }
 function backHead(title,subtitle){return header(`<button class="icon" id="back" aria-label="Retour" style="display:inline-grid;vertical-align:middle;margin-left:-8px">‹</button>${title}`,subtitle)}
