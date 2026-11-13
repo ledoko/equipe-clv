@@ -7,7 +7,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<meta name="theme-color" content="#0f7c74">
+<meta name="theme-color" content="#025b3b">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -95,6 +95,7 @@ h2{font-family:var(--display);font-weight:600;font-size:1.1rem;margin:0}
 /* connexion */
 .login{min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:24px 16px}
 .login h1{font-size:1.8rem;text-align:center}
+.login .logo{width:96px;height:96px;border-radius:50%;margin-bottom:-8px;box-shadow:0 6px 18px rgba(0,0,0,.18)}
 .dots{display:flex;gap:14px}
 .dots i{width:16px;height:16px;border-radius:50%;border:2px solid var(--lagoon)}
 .dots i.on{background:var(--lagoon)}
@@ -212,7 +213,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-13b";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-13c";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -284,7 +285,7 @@ function loginView(err){
   const dev=window.DEV_PINS?`<p class="hint" style="text-align:center">Mode test : ${window.DEV_PINS.map(p=>esc(p.prenom)+" "+p.pin).join(" · ")}</p>`:"";
   $("#root").innerHTML=`<div class="login">
     ${IN_APP?`<div class="inapp"><p><b>Ouvre l'appli dans ton vrai navigateur</b></p><p>Tu es dans le navigateur d'une autre appli (Messenger, Facebook…) : ta connexion ne sera pas gardée.</p><button class="btn small" id="lg-how">Comment faire ?</button></div>`:""}
-    <h1>Équipe CLV</h1>
+    ${API_URL?`<img class="logo" src="icon-192.png" alt="Sunshine Coffee" width="96" height="96">`:""}<h1>Équipe CLV</h1>
     <p class="hint">Entre ton code à 4 chiffres</p>
     <div class="dots" id="dots"><i></i><i></i><i></i><i></i></div>
     <p class="err" id="lg-err" ${err?"":"hidden"}>${esc(err||"")}</p>
