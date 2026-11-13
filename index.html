@@ -97,6 +97,8 @@ h2{font-family:var(--display);font-weight:600;font-size:1.1rem;margin:0}
 .login h1{font-size:1.8rem;text-align:center}
 .pt.warn{color:var(--warn)}
 .ecart{color:var(--warn);font-weight:600}
+.who2{color:var(--ok);font-weight:600}
+.who2:empty{display:none}
 .notifcard{display:flex;gap:10px;align-items:center}
 .app.stale{pointer-events:none;opacity:.6;transition:opacity .2s}
 .app.stale::before{content:"Mise à jour…";position:fixed;top:calc(8px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:5;background:var(--surface);color:var(--muted);border:1px solid var(--line);border-radius:99px;padding:3px 12px;font-size:.78rem;opacity:1}
@@ -218,7 +220,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-14f";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-14g";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -535,9 +537,9 @@ async function vTaches(){
     if(x.section&&x.section!=="Semaine type"&&x.section!==curS){curS=x.section;html+=`<div class="sgrp">${esc(x.section)}</div>`}
     const badge=x.freq==="semaine"?`<span class="pill info">Hebdo</span>`:x.freq==="mois"?`<span class="pill info">Mensuel</span>`:"";
     const late=x.retard&&!x.fait?`<span class="pill no">Prévu ${jourCourt(x.echeance)}</span>`:"";
-    const who=x.fait?`<span>✓ ${esc(x.fait.par)} ${x.fait.le.slice(11,16)}</span>`:"";
+    const who=`<span class="who2">${x.fait?`✓ Fait par ${esc(x.fait.par)} à ${x.fait.le.slice(11,16)}`:""}</span>`;
     const meta=[badge,late,x.qui?`<span>· ${esc(x.qui)}</span>`:"",who].filter(Boolean).join("");
-    html+=`<button class="task ${x.fait?"done":""}" data-t="${esc(x.id)}" ${d>today()?"disabled":""}><span class="box">${x.fait?"✓":""}</span><span class="grow"><div class="tt">${esc(x.titre)}</div>${x.note?`<div class="nn">${esc(x.note)}</div>`:""}${meta?`<div class="meta">${meta}</div>`:""}</span></button>`;
+    html+=`<button class="task ${x.fait?"done":""}" data-t="${esc(x.id)}" ${d>today()?"disabled":""}><span class="box">${x.fait?"✓":""}</span><span class="grow"><div class="tt">${esc(x.titre)}</div>${x.note?`<div class="nn">${esc(x.note)}</div>`:""}<div class="meta">${meta}</div></span></button>`;
   });
   $("#app").innerHTML=`${header("Tâches")}
   <div class="nav"><button class="icon" id="dprev" aria-label="Jour précédent">‹</button><b class="cap">${d===today()?"Aujourd'hui · ":""}${jourCourt(d)} ${dt(d,{month:"short"})}</b><button class="icon" id="dnext" aria-label="Jour suivant" ${d>=today()?"disabled":""}>›</button></div>
@@ -555,9 +557,11 @@ async function vTaches(){
   $("#tl").addEventListener("click",async e=>{
     const b=e.target.closest("[data-t]");if(!b||b.disabled)return;
     const x=list.find(y=>y.id===b.dataset.t), fait=!x.fait;
-    x.fait=fait?{par:S.me.prenom,le:S.now.stamp||""}:null;
+    const w=b.querySelector(".who2");
+    x.fait=fait?{par:S.me.prenom,le:"0000-00-00 "+heureLocale()}:null;
     b.classList.toggle("done",fait);b.querySelector(".box").textContent=fait?"✓":"";
-    try{await call("tacheCocher",{tacheId:x.id,date:d,fait})}catch(err){toast(err.message,true);go("taches")}
+    if(w)w.textContent=fait?`✓ Fait par ${S.me.prenom} à ${heureLocale()}`:"";
+    try{const r=await call("tacheCocher",{tacheId:x.id,date:d,fait});if(fait&&r&&r.le&&w){x.fait=r;w.textContent=`✓ Fait par ${r.par} à ${r.le.slice(11,16)}`}}catch(err){toast(err.message,true);go("taches")}
   });
 }
 
