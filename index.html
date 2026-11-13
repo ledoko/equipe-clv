@@ -218,7 +218,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-14d";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-14e";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -410,12 +410,13 @@ async function vAccueil(){
   const alertes=al?`<section class="card"><div class="sechead"><h2>À voir</h2><small>${al.length?plural(al.length,"point"):""}</small></div>${al.length?al.map(a=>`<div class="alert"><i>${{demande:"🌴",pointage:"⏱",commande:"🛒",frequence:"📦",tache:"✅"}[a.type]||"•"}</i><span>${esc(a.txt)}</span></div>`).join(""):`<p class="hint">Rien à signaler.</p>`}</section>`:"";
   $("#app").innerHTML=`${header("Bonjour "+esc(S.me.prenom),jourLong(t))}
   ${IN_APP?`<section class="inapp"><p><b>Ouvre l'appli dans ton vrai navigateur</b></p><p>Tu es dans le navigateur d'une autre appli : ta connexion risque de ne pas être gardée.</p><button class="btn small" id="inappHow">Comment faire ?</button></section>`:""}
+  <div id="notiftop"></div>
   ${hero}
   ${alertes}
   <section class="card" id="tsum"><div class="sechead"><h2>Tâches du jour</h2><small id="tcount">…</small></div><div class="prog"><i id="tprog" style="width:0%"></i></div><button class="btn ghost" id="gotasks">Voir les tâches</button></section>
   <section class="sec"><div class="sechead"><h2>Mes prochains postes</h2></div>
   <div class="list">${prochains.length?prochains.map(s=>`<div class="item"><span style="width:6px;align-self:stretch;border-radius:3px;background:${esc(poste(s.posteId).couleur)}"></span><div class="t"><div class="a cap">${jourLong(s.date)}</div><div class="b">${s.debut}–${s.fin} · ${esc(poste(s.posteId).nom)}</div></div></div>`).join(""):`<div class="empty">Rien de prévu dans les 2 semaines.</div>`}</div></section>
-  <div id="notifcard"></div>
+  <div id="notifbas"></div>
   <button class="btn ghost" id="install">📲 Installer l'appli sur mon téléphone</button>
   <button class="btn ghost" id="moncode" style="margin-top:8px">🔑 Changer mon code</button>
   <p class="hint" style="text-align:center">version ${APP_VERSION}</p>`;
@@ -968,19 +969,23 @@ async function activerNotifs(){
   return true;
 }
 async function notifCard(){
-  const box=$("#notifcard");if(!box||!PUSH_OK)return;
-  let html="";
+  const top=$("#notiftop"),bas=$("#notifbas");if(!top||!bas||!PUSH_OK)return;
+  let haut="",bas2="";
   if(!("PushManager" in window)||typeof Notification==="undefined"){
-    if(IOS&&!STANDALONE)html=`<section class="card soft small notifcard"><span style="font-size:1.4rem">🔔</span><span>Pour recevoir les rappels, ajoute d'abord l'appli à l'écran d'accueil (bouton ci-dessous), puis ouvre-la depuis l'icône.</span></section>`;
-    else html=`<section class="card soft small notifcard"><span style="font-size:1.4rem">🔕</span><span>Ce téléphone ne peut pas recevoir les notifications de l'appli${IOS?" : il faut iOS 16.4 ou plus récent (Réglages › Général › Mise à jour logicielle)":""}.</span></section>`;
-  }else if(Notification.permission==="default"||(Notification.permission==="granted"&&!(await pushSub()))){
-    html=`<section class="card notifcard"><span style="font-size:1.4rem">🔔</span><span class="grow small">Reçois un rappel pour noter ton arrivée, ton départ et les tâches.</span><button class="btn small" id="notifon">Activer</button></section>`;
+    if(IOS&&!STANDALONE)haut=`<section class="card soft small notifcard"><span style="font-size:1.4rem">🔔</span><span>Pour recevoir les rappels, ajoute d'abord l'appli à l'écran d'accueil (bouton en bas de la page), puis ouvre-la depuis l'icône.</span></section>`;
+    else haut=`<section class="card soft small notifcard"><span style="font-size:1.4rem">🔕</span><span>Ce téléphone ne peut pas recevoir les notifications de l'appli${IOS?" : il faut iOS 16.4 ou plus récent (Réglages › Général › Mise à jour logicielle)":""}.</span></section>`;
   }else if(Notification.permission==="denied"){
-    html=`<section class="card soft small notifcard"><span style="font-size:1.4rem">🔕</span><span>Notifications bloquées : autorise-les pour cette appli dans les réglages du téléphone.</span></section>`;
+    haut=`<section class="card soft small notifcard"><span style="font-size:1.4rem">🔕</span><span>Notifications bloquées : autorise-les pour cette appli dans les réglages du téléphone.</span></section>`;
+  }else{
+    const sb=Notification.permission==="granted"?await pushSub():null;
+    if(sb)bas2=`<button class="btn ghost" id="notifoff">🔕 Désactiver les notifications</button>`;
+    else haut=`<section class="card notifcard"><span style="font-size:1.4rem">🔔</span><span class="grow small">Reçois un rappel pour noter ton arrivée, ton départ et les tâches.</span><button class="btn small" id="notifon">Activer</button></section>`;
   }
-  if(!$("#notifcard"))return;
-  $("#notifcard").innerHTML=html;
-  const b=$("#notifon");if(b)b.onclick=async()=>{b.disabled=true;try{if(await activerNotifs())$("#notifcard").innerHTML=""}catch(e){toast(e.message||"Impossible d'activer les notifications",true)}b.disabled=false};
+  if(!$("#notiftop"))return;
+  $("#notiftop").innerHTML=haut;$("#notifbas").innerHTML=bas2;
+  const on=$("#notifon");if(on)on.onclick=async()=>{on.disabled=true;try{await activerNotifs()}catch(e){toast(e.message||"Impossible d'activer les notifications",true)}notifCard()};
+  const off=$("#notifoff");if(off)off.onclick=()=>confirmSheet("Désactiver les notifications ?","Tu ne recevras plus les rappels sur ce téléphone. Tu pourras les réactiver en haut de l'accueil.","Désactiver",async()=>{
+    try{const sb=await pushSub();if(sb){try{await call("desabonner",{endpoint:sb.endpoint})}catch(e){}await sb.unsubscribe()}toast("Notifications désactivées")}catch(e){toast(e.message,true)}notifCard()});
 }
 
 function confirmSheet(title,text,label,fn){
