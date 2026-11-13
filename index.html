@@ -220,7 +220,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-14g";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-14h";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -668,6 +668,7 @@ async function vGerer(){
   $("#app").innerHTML=`${header("Gérer")}
   <div class="list">${items.map(([k,i,a,b])=>`<button class="item" data-p="${k}"><span style="font-size:1.4rem">${i}</span><div class="t"><div class="a">${a}</div><div class="b">${b}</div></div><span class="muted">›</span></button>`).join("")}</div>
   <button class="btn ghost" id="vueemp">👀 Voir l'appli comme un employé</button>
+  ${API_URL&&!IOS&&!ANDROID?`<a class="btn ghost" href="gestion.html" style="display:block;text-align:center;text-decoration:none;margin-top:8px">🖥 Ouvrir l'écran de gestion (ordinateur)</a>`:""}
   <button class="btn ghost" id="install">📲 Lien de l'appli et installation</button>
   <p class="hint" style="text-align:center">Équipe CLV · version ${APP_VERSION} · serveur ${esc(S.version)}${IS_GAS||API_URL?"":" · mode test (PC)"}</p>`;
   bindOut();
