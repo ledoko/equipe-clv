@@ -220,7 +220,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-14l";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-14m";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -548,9 +548,11 @@ async function vTaches(){
   <div class="card"><div class="sechead"><h2>${f} / ${n} faites</h2><label class="small muted row" style="gap:6px"><input type="checkbox" id="cacher" style="width:auto" ${cacher?"checked":""}> Cacher les faites</label></div><div class="prog"><i style="width:${n?f/n*100:0}%"></i></div></div>
   <div class="chips"><button class="chip" data-f="tout" aria-pressed="${filtre==="tout"}">Tout</button>${moments.map(m=>`<button class="chip" data-f="${esc(m)}" aria-pressed="${filtre===m}">${esc(m)}</button>`).join("")}</div>
   <div class="list" id="tl">${html||`<div class="empty">${cacher&&n?"Tout est fait 🎉":"Aucune tâche"}</div>`}</div>
+  ${d===today()?`<button class="btn ghost" id="compter" style="margin-bottom:8px">🧴 Compter les sauces et les condiments</button>`:""}
   <button class="btn ghost" id="sugg">💡 Suggérer une tâche</button>`;
   bindOut();
   $("#sugg").onclick=()=>suggestionSheet(filtre!=="tout"?filtre:"");
+  const cpt=$("#compter");if(cpt)cpt.onclick=()=>comptageSheet(null);
   const setSub=o=>{sub=Object.assign({date:d,filtre,cacher},o);go("taches")};
   $("#dprev").onclick=()=>setSub({date:addDays(d,-1)});
   $("#dnext").onclick=()=>{if(d<today())setSub({date:addDays(d,1)})};
@@ -1032,7 +1034,7 @@ async function comptageSheet(tache){
       const lignes=Object.keys(vals).filter(k=>vals[k]!=="").map(k=>({itemId:k,qte:vals[k]}));
       if(!lignes.length){toast("Compte au moins une sauce ou un condiment",true);return}
       const manquants=r.items.filter(i=>vals[i.id]==null||vals[i.id]==="").length;
-      const valider=async()=>{$("#c-ok").disabled=true;try{const res=await call("comptageValider",{lignes,tacheId:tache.id});
+      const valider=async()=>{$("#c-ok").disabled=true;try{const res=await call("comptageValider",{lignes,tacheId:tache?tache.id:""});
         open(`<h3>Comptage enregistré ✓</h3>${res.aRemplir.length?`<p class="hint">Ajouté aux tâches (post-service) :</p>${res.aRemplir.map(t=>`<div class="item"><span>🧴</span><div class="t"><div class="a">${esc(t)}</div></div></div>`).join("")}`:`<p class="hint">Tout est au complet. Merci !</p>`}<button class="btn full" id="c-fin">OK</button>`,()=>{$("#c-fin").onclick=()=>{close();go("taches")}});
       }catch(e){toast(e.message,true);$("#c-ok").disabled=false}};
       if(manquants&&!confirm(manquants+(manquants>1?" articles pas comptés":" article pas compté")+". Valider quand même ?"))return;
