@@ -212,7 +212,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-13";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-13b";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -365,8 +365,10 @@ async function vAccueil(){
   <section class="card" id="tsum"><div class="sechead"><h2>Tâches du jour</h2><small id="tcount">…</small></div><div class="prog"><i id="tprog" style="width:0%"></i></div><button class="btn ghost" id="gotasks">Voir les tâches</button></section>
   <section class="sec"><div class="sechead"><h2>Mes prochains postes</h2></div>
   <div class="list">${prochains.length?prochains.map(s=>`<div class="item"><span style="width:6px;align-self:stretch;border-radius:3px;background:${esc(poste(s.posteId).couleur)}"></span><div class="t"><div class="a cap">${jourLong(s.date)}</div><div class="b">${s.debut}–${s.fin} · ${esc(poste(s.posteId).nom)}</div></div></div>`).join(""):`<div class="empty">Rien de prévu dans les 2 semaines.</div>`}</div></section>
-  <button class="btn ghost" id="install">📲 Installer l'appli sur mon téléphone</button>`;
+  <button class="btn ghost" id="install">📲 Installer l'appli sur mon téléphone</button>
+  <button class="btn ghost" id="moncode" style="margin-top:8px">🔑 Changer mon code</button>`;
   bindOut();
+  $("#moncode").onclick=()=>codeSheet();
   $("#app").querySelectorAll("[data-pt]").forEach(b=>b.onclick=()=>{
     const type=b.dataset.pt, now=new Date().toTimeString().slice(0,5);
     const go2=async()=>{await act(()=>call("pointer",{type}),{arrivee:"Arrivée notée",pauseDebut:"Bonne pause !",pauseFin:"Fin de pause notée",depart:"Départ noté. Bonne soirée !"}[type]);go("accueil")};
@@ -782,6 +784,20 @@ function confirmSheet(title,text,label,fn){
   open(`<h3>${esc(title)}</h3>${text?`<p class="hint">${esc(text)}</p>`:""}<div class="actions"><button class="btn ghost" id="c-no">Annuler</button><button class="btn" id="c-yes">${esc(label)}</button></div>`,()=>{
     $("#c-no").onclick=close;
     $("#c-yes").onclick=async()=>{$("#c-yes").disabled=true;close();try{await fn()}catch(e){}};
+  });
+}
+function codeSheet(){
+  const pin=id=>`<input id="${id}" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off">`;
+  open(`<h3>Changer mon code</h3><label class="f">Code actuel${pin("mc-old")}</label><label class="f">Nouveau code (4 chiffres)${pin("mc-new")}</label><label class="f">Nouveau code, encore une fois${pin("mc-new2")}</label>
+  <div class="actions"><button class="btn ghost" id="mc-no">Annuler</button><button class="btn" id="mc-ok">Enregistrer</button></div>`,()=>{
+    $("#mc-no").onclick=close;
+    $("#mc-ok").onclick=async()=>{
+      const a=$("#mc-old").value.trim(),n=$("#mc-new").value.trim(),n2=$("#mc-new2").value.trim();
+      if(!/^\d{4}$/.test(n)){toast("Le nouveau code doit avoir 4 chiffres",true);return}
+      if(n!==n2){toast("Les deux nouveaux codes sont différents",true);return}
+      $("#mc-ok").disabled=true;
+      try{await act(()=>call("monCode",{ancien:a,nouveau:n}),"Code changé. Retiens-le bien !");close()}catch(e){$("#mc-ok").disabled=false}
+    };
   });
 }
 function installSheet(){
