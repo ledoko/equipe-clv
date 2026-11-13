@@ -347,7 +347,7 @@ async function pPlanning(){
     jours.forEach((d,i)=>{
       const sh=shifts.filter(s=>s.empId===e.id&&s.date===d).sort((a,b)=>a.debut<b.debut?-1:1);
       const rp=repos.filter(r=>r.empId===e.id&&r.date===d);
-      cells+=`<div class="cell ${i>=5?"weekend":""}" data-e="${esc(e.id)}" data-d="${d}">${rp.map(r=>`<div class="repos">${esc(r.type)} #${esc(r.num)}</div>`).join("")}${sh.map(chip).join("")}</div>`;
+      cells+=`<div class="cell ${i>=5?"weekend":""}" data-e="${esc(e.id)}" data-d="${d}">${rp.map(r=>`<div class="repos" data-rep="${esc(r.num)}" title="Cliquer pour annuler">${esc(r.type)} #${esc(r.num)}</div>`).join("")}${sh.map(chip).join("")}</div>`;
     });
   });
   $("#main").innerHTML=`<div class="top"><h1 class="grow">Planning</h1>
@@ -370,6 +370,7 @@ async function pPlanning(){
       :call("shiftSave",{id:o.id,empId:o.empId,date:o.date,debut:o.debut,fin:o.fin,pause:o.pause,posteId:o.posteId,note:o.note||""})};
   // clic : modifier / ajouter
   $("#main").querySelector(".pgrid").addEventListener("click",e=>{
+    const rp=e.target.closest("[data-rep]");if(rp){annulerAbsence(rp.dataset.rep);return}
     const b=e.target.closest("[data-sid]");if(b){shiftDlg(shifts.find(s=>s.id===b.dataset.sid),pointages,save);return}
     const c=e.target.closest(".cell");if(c){const emp=S.employes.find(x=>x.id===c.dataset.e);shiftDlg({empId:c.dataset.e,date:c.dataset.d,debut:"07:00",fin:"15:00",pause:"0",posteId:emp&&emp.posteId||""},pointages,save)}
   });
@@ -386,6 +387,23 @@ async function pPlanning(){
   });
   g.addEventListener("dragend",()=>{drag=null;g.querySelectorAll(".over").forEach(x=>x.classList.remove("over"))});
 }
+function absenceDlg(s){
+  const emp=S.employes.find(e=>e.id===s.empId)||{prenom:"?"};
+  dialog(`<h3>${esc(emp.prenom)} ne travaille pas</h3><p class="muted">${dt(s.date,{weekday:"long",day:"numeric",month:"long"})} · poste ${s.debut}–${s.fin}</p>
+  <div class="g2"><label class="f">Motif<select id="a-t"><option>Maladie</option><option>Absence</option><option>Repos</option><option>Congé payé</option><option>Autre</option></select></label>
+  <label class="f">Jusqu'au (inclus)<input id="a-au" type="date" value="${s.date}" min="${s.date}"></label></div>
+  <label class="f">Précision (facultatif)<input id="a-m" maxlength="300" placeholder="Ex. : arrêt maladie, prévenu par téléphone"></label>
+  <p class="muted small">Les postes de ces jours sont retirés du planning ; les jours apparaissent dans le rapport Proxima (repos / absences). Pour annuler, clique sur la case hachurée.</p>
+  <div class="acts"><button class="btn ghost" data-x>Annuler</button><button class="btn" data-y>Valider</button></div>`,(d,close)=>{
+    d.querySelector("[data-x]").onclick=close;
+    d.querySelector("[data-y]").onclick=async()=>{try{await call("demandeCreer",{type:d.querySelector("#a-t").value,du:s.date,au:d.querySelector("#a-au").value||s.date,motif:d.querySelector("#a-m").value,empId:s.empId,accepter:true});toast("Enregistré");close();pPlanning()}catch(e){toast(e.message,true)}};
+  });
+}
+async function annulerAbsence(num){
+  const list=await call("demandes");const x=list.find(y=>String(y.num)===String(num));if(!x)return;
+  const emp=S.employes.find(e=>e.id===x.empId)||{prenom:"?"};
+  confirmer(`Annuler : ${x.type} de ${emp.prenom} ?`,`Du ${x.du.slice(8,10)}/${x.du.slice(5,7)} au ${x.au.slice(8,10)}/${x.au.slice(5,7)}. Les postes retirés ne reviennent pas tout seuls : rajoute-les ensuite (clic sur la case vide), ou « Refaire cette semaine depuis la semaine type ».`,"Annuler l'absence",async()=>{await act(()=>call("demandeAnnuler",{id:x.id}),"Absence annulée");pPlanning()});
+}
 function shiftDlg(s,pointages,save){
   const nouveau=!s.id,p=!P.type&&pointages.find(x=>x.empId===s.empId&&x.date===s.date);
   const pointable=!P.type&&s.date<=S.now.date;
@@ -395,6 +413,7 @@ function shiftDlg(s,pointages,save){
   <div class="g3"><label class="f">Début<input id="s-d" type="time" value="${esc(s.debut)}"></label><label class="f">Fin<input id="s-f" type="time" value="${esc(s.fin)}"></label><label class="f">Pause (min)<input id="s-pa" type="number" min="0" value="${esc(s.pause||"0")}"></label></div>
   ${P.type?"":`<label class="f">Note<input id="s-n" value="${esc(s.note||"")}"></label>`}
   <div class="acts">${nouveau?"":`<button class="btn bad" id="s-del" style="margin-right:auto">Supprimer</button>`}<button class="btn ghost" data-x>Annuler</button><button class="btn" id="s-ok">Enregistrer</button></div>
+  ${nouveau||P.type?"":`<div class="acts" style="justify-content:flex-start"><button class="btn sun" id="s-abs">🤒 Absent·e, malade ou en repos ce jour-là</button></div>`}
   ${pointable&&!nouveau?`<hr style="border:0;border-top:1px solid var(--line);margin:16px 0">
   <h3>Heures réelles (pointage)</h3>
   ${p&&(p.arriveeNotee||p.departNotee)?`<p class="small muted">${p.arriveeNotee?`Arrivée ${p.arrivee} notée à ${p.arriveeNotee.slice(11,16)}`:""}${p.departNotee?` · départ ${p.depart} noté à ${p.departNotee.slice(11,16)}`:""}${p.corrigePar?` · corrigé par ${esc(p.corrigePar)}`:""}</p>`:""}
@@ -402,6 +421,7 @@ function shiftDlg(s,pointages,save){
   <div class="acts">${p?`<button class="btn ghost" id="p-del" style="margin-right:auto">Effacer le pointage</button>`:""}<button class="btn" id="p-ok">Corriger le pointage</button></div>`:""}`,(d,close)=>{
     d.querySelector("[data-x]").onclick=close;
     d.querySelector("#s-ok").onclick=async()=>{try{await save(s,{empId:d.querySelector("#s-e").value,posteId:d.querySelector("#s-p").value,debut:d.querySelector("#s-d").value,fin:d.querySelector("#s-f").value,pause:d.querySelector("#s-pa").value,note:d.querySelector("#s-n")?d.querySelector("#s-n").value:""});toast("Enregistré");close();pPlanning()}catch(e){toast(e.message,true)}};
+    const ab=d.querySelector("#s-abs");if(ab)ab.onclick=()=>{close();absenceDlg(s)};
     const del=d.querySelector("#s-del");if(del)del.onclick=async()=>{try{await call(P.type?"semaineTypeDelete":"shiftDelete",{id:s.id});toast("Poste supprimé");close();pPlanning()}catch(e){toast(e.message,true)}};
     const pok=d.querySelector("#p-ok");if(pok)pok.onclick=async()=>{try{await call("pointageSave",{empId:s.empId,date:s.date,arrivee:d.querySelector("#p-a").value,depart:d.querySelector("#p-d").value,pause:d.querySelector("#p-pa").value});toast("Pointage corrigé");close();pPlanning()}catch(e){toast(e.message,true)}};
     const pdl=d.querySelector("#p-del");if(pdl)pdl.onclick=async()=>{try{await call("pointageSupprimer",{empId:s.empId,date:s.date});toast("Pointage effacé");close();pPlanning()}catch(e){toast(e.message,true)}};
@@ -581,12 +601,13 @@ async function pEquipe(){
     <td><select data-f="role" ${e.id===S.me.id?"disabled title=\"Ton propre compte reste admin\"":""}>${ROLES.map(([v,l])=>`<option value="${v}" ${(e.role||"employe")===v?"selected":""}>${l}</option>`).join("")}</select></td>
     <td><input data-f="baseHebdo" value="${esc(e.baseHebdo)}" title="Heures par semaine au contrat (39 = temps plein)"></td>
     <td><select data-f="actif" ${e.id===S.me.id?"disabled":""}><option value="oui" ${e.actif!=="non"?"selected":""}>Oui</option><option value="non" ${e.actif==="non"?"selected":""}>Parti·e</option></select></td>
+    <td style="text-align:center"><input type="checkbox" data-f="rapport" ${e.rapport!=="non"?"checked":""} style="width:auto" title="Ses heures vont dans le rapport du mois pour Proxima"></td>
     <td>${e.aUnCode?"":`<span class="pill warn">pas de code</span> `}<button class="btn small ghost" data-code="${esc(e.id)}">Nouveau code</button></td></tr>`).join("");
   $("#main").innerHTML=`<div class="top"><h1 class="grow">Équipe</h1><span class="saved" id="saved"></span><button class="btn" id="new">+ Nouvelle personne</button></div>
-  <div class="scrollx"><table class="t" style="min-width:1060px"><colgroup><col style="width:12%"><col style="width:12%"><col><col style="width:178px"><col style="width:140px"><col style="width:78px"><col style="width:96px"><col style="width:150px"></colgroup><thead><tr><th>Prénom</th><th>Nom</th><th>Email</th><th>Poste</th><th>Rôle</th><th>H/semaine</th><th>Active</th><th>Code</th></tr></thead><tbody id="tb">${rows}</tbody></table></div>
-  <p class="muted small">H/semaine : 39 = temps plein ; en dessous, les heures jusqu'à 39 h comptent en heures complémentaires dans le rapport Proxima. Un compte test n'apparaît dans aucun rapport. Une personne « partie » ne peut plus se connecter.</p>`;
+  <div class="scrollx"><table class="t" style="min-width:1060px"><colgroup><col style="width:12%"><col style="width:12%"><col><col style="width:178px"><col style="width:140px"><col style="width:78px"><col style="width:96px"><col style="width:92px"><col style="width:150px"></colgroup><thead><tr><th>Prénom</th><th>Nom</th><th>Email</th><th>Poste</th><th>Rôle</th><th>H/semaine</th><th>Active</th><th>Rapport Proxima</th><th>Code</th></tr></thead><tbody id="tb">${rows}</tbody></table></div>
+  <p class="muted small">Rapport Proxima : décoche pour une personne payée autrement (ses heures restent dans le planning et le rapport du jour). H/semaine : 39 = temps plein ; en dessous, les heures jusqu'à 39 h comptent en heures complémentaires dans le rapport Proxima. Un compte test n'apparaît dans aucun rapport. Une personne « partie » ne peut plus se connecter.</p>`;
   $("#tb").addEventListener("change",async e=>{const tr=e.target.closest("tr[data-id]"),f=e.target.dataset.f;if(!tr||!f)return;
-    try{await call("employeSave",{id:tr.dataset.id,[f]:e.target.value.trim()});const s=$("#saved");if(s){s.textContent="✓ Enregistré";setTimeout(()=>{if($("#saved"))$("#saved").textContent=""},1500)}S=await call("boot");if(f==="actif")pEquipe()}catch(err){toast(err.message,true);pEquipe()}});
+    try{await call("employeSave",{id:tr.dataset.id,[f]:e.target.type==="checkbox"?(e.target.checked?"oui":"non"):e.target.value.trim()});const s=$("#saved");if(s){s.textContent="✓ Enregistré";setTimeout(()=>{if($("#saved"))$("#saved").textContent=""},1500)}S=await call("boot");if(f==="actif")pEquipe()}catch(err){toast(err.message,true);pEquipe()}});
   autoH($("#main"));
   const montrer=(prenom,pin)=>dialog(`<h3>Code de ${esc(prenom)}</h3><p style="font-size:2.4rem;font-family:var(--display);letter-spacing:.3em;text-align:center;margin:10px 0">${esc(pin)}</p><p class="muted small">Donne-le à ${esc(prenom)}. Il ne sera plus affiché ensuite. ${esc(prenom)} pourra le changer dans l'appli (Accueil › Changer mon code).</p><div class="acts"><button class="btn" data-x>J'ai noté</button></div>`,(d,close)=>{d.querySelector("[data-x]").onclick=close});
   $("#main").querySelectorAll("[data-code]").forEach(b=>b.onclick=()=>{const e=list.find(x=>x.id===b.dataset.code);
