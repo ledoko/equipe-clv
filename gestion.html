@@ -186,7 +186,7 @@ async function start(){
 }
 
 // ---------- coque : menu à gauche
-const PAGES=[["taches","✅","Tâches"],["planning","📅","Planning"],["articles","📦","Articles",1],["fournisseurs","🚚","Fournisseurs",1],["rapports","🧾","Rapports",1],["equipe","👥","Équipe",1]];
+const PAGES=[["taches","✅","Tâches"],["planning","📅","Planning"],["articles","📦","Articles"],["fournisseurs","🚚","Fournisseurs"],["rapports","🧾","Rapports"],["equipe","👥","Équipe"]];
 function shell(){
   $("#root").innerHTML=`<div class="shell"><aside class="side"><div class="logo"><img src="icon-192.png" alt=""><b>Gestion<br>Café La Victoria</b></div>
   ${PAGES.map(([k,i,l,later])=>`<button class="nav ${later?"later":""}" data-v="${k}" ${view===k?'aria-current="page"':""} ${later?'title="Bientôt"':""}><span>${i}</span>${l}${k==="taches"?'<span class="n" id="nsugg" hidden></span>':""}${later?'<span class="muted small" style="margin-left:auto">bientôt</span>':""}</button>`).join("")}
@@ -194,7 +194,7 @@ function shell(){
   <main class="main" id="main"></main></div>`;
   $("#root").querySelectorAll(".nav:not(.later)").forEach(b=>b.onclick=()=>{view=b.dataset.v;shell()});
   $("#out").onclick=()=>confirmer("Se déconnecter ?","Tu devras retaper ton code.","Se déconnecter",async()=>{try{await call("deconnexion",{token})}catch(e){}logout()});
-  const fn={taches:pTaches,planning:pPlanning}[view]||pTaches;
+  const fn={taches:pTaches,planning:pPlanning,articles:pArticles,fournisseurs:pFournisseurs,rapports:pRapports,equipe:pEquipe}[view]||pTaches;
   $("#main").innerHTML=`<div class="spin"></div>`;
   fn().catch(e=>{$("#main").innerHTML=`<div class="card"><b>Oups</b><p class="muted">${esc(e.message)}</p><button class="btn" id="retry">Réessayer</button></div>`;$("#retry").onclick=shell});
 }
@@ -397,6 +397,194 @@ function shiftDlg(s,pointages,save){
     const pok=d.querySelector("#p-ok");if(pok)pok.onclick=async()=>{try{await call("pointageSave",{empId:s.empId,date:s.date,arrivee:d.querySelector("#p-a").value,depart:d.querySelector("#p-d").value,pause:d.querySelector("#p-pa").value});toast("Pointage corrigé");close();pPlanning()}catch(e){toast(e.message,true)}};
     const pdl=d.querySelector("#p-del");if(pdl)pdl.onclick=async()=>{try{await call("pointageSupprimer",{empId:s.empId,date:s.date});toast("Pointage effacé");close();pPlanning()}catch(e){toast(e.message,true)}};
   });
+}
+
+// =====================================================================================  ARTICLES
+const A={q:"",zone:"",fourn:"",etat:"actifs",seuil:"",sel:new Set()};
+const JC=["L","M","M","J","V","S","D"];
+function telecharger(nom,lignes){
+  const csv="﻿"+lignes.map(r=>r.map(c=>{c=String(c==null?"":c);return /[;"\n]/.test(c)?'"'+c.replace(/"/g,'""')+'"':c}).join(";")).join("\r\n");
+  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));a.download=nom;document.body.appendChild(a);a.click();a.remove();
+}
+async function pArticles(){
+  const r=await call("articlesAdmin");
+  const arts=r.articles, fo={};r.fournisseurs.forEach(f=>fo[f.id]=f.nom);
+  const byId={};arts.forEach(a=>byId[a.id]=a);
+  const zones=[...new Set(arts.map(a=>a.zone).filter(Boolean))].sort(), unites=[...new Set(arts.map(a=>a.unite).filter(Boolean))].sort();
+  const q=A.q.trim().toLowerCase();
+  const vis=arts.filter(a=>(A.etat==="toutes"||(A.etat==="actifs"?a.actif!=="non":a.actif==="non"))&&(!A.zone||a.zone===A.zone)&&(!A.fourn||a.fournisseurId===A.fourn)
+    &&(!A.seuil||(A.seuil==="sans"?a.min==="":a.min!==""))&&(!q||(a.nom+" "+a.ref+" "+a.note+" "+(fo[a.fournisseurId]||"")).toLowerCase().includes(q)))
+    .sort((x,y)=>(x.zone||"~").localeCompare(y.zone||"~","fr")||(+x.ordre||0)-(+y.ordre||0));
+  const sansSeuil=arts.filter(a=>a.actif!=="non"&&a.min==="").length;
+  const fSel=v=>`<option value="">— aucun —</option>${r.fournisseurs.slice().sort((a,b)=>a.nom.localeCompare(b.nom,"fr")).map(f=>`<option value="${esc(f.id)}" ${f.id===v?"selected":""}>${esc(f.nom)}</option>`).join("")}`;
+  const MAX=400,montre=vis.slice(0,MAX);
+  let rows="",cur=null;
+  montre.forEach(a=>{
+    if(a.zone!==cur){cur=a.zone;rows+=`<tr class="grp"><td colspan="10">${esc(a.zone||"Sans zone")}</td></tr>`}
+    const js=String(a.jours||"").split(",").filter(Boolean);
+    rows+=`<tr data-id="${esc(a.id)}" class="${a.actif==="non"?"off":""} ${A.sel.has(a.id)?"sel":""}">
+      <td style="width:28px"><input type="checkbox" data-sel ${A.sel.has(a.id)?"checked":""} style="width:auto"></td>
+      <td><input data-f="nom" value="${esc(a.nom)}"></td>
+      <td style="width:190px"><select data-f="fournisseurId">${fSel(a.fournisseurId)}</select></td>
+      <td style="width:160px"><input data-f="zone" value="${esc(a.zone)}" list="dl-zones"></td>
+      <td style="width:120px"><input data-f="unite" value="${esc(a.unite)}" list="dl-unites"></td>
+      <td style="width:70px"><input data-f="min" value="${esc(a.min)}" inputmode="decimal" placeholder="—" title="Commander si le stock est à ce niveau ou en dessous"></td>
+      <td style="width:70px"><input data-f="cible" value="${esc(a.cible)}" inputmode="decimal" placeholder="—" title="Quantité à avoir après la commande"></td>
+      <td style="width:150px;white-space:nowrap">${JC.map((j,i)=>`<label title="${JOURS[i]}" style="display:inline-flex;flex-direction:column;align-items:center;font-size:.7rem;color:var(--muted);margin-right:2px">${j}<input type="checkbox" data-jour="${i+1}" ${js.includes(String(i+1))?"checked":""} style="width:auto;margin:0"></label>`).join("")}</td>
+      <td style="width:160px"><input data-f="note" value="${esc(a.note)}" placeholder="note"></td>
+      <td style="width:54px;text-align:center"><input type="checkbox" data-f="actif" ${a.actif!=="non"?"checked":""} style="width:auto"></td></tr>`;
+  });
+  $("#main").innerHTML=`<div class="top"><h1 class="grow">Articles de l'inventaire</h1><span class="saved" id="saved"></span><button class="btn ghost" id="csv">Télécharger (Excel)</button><button class="btn" id="new">+ Nouvel article</button></div>
+  <datalist id="dl-zones">${zones.map(z=>`<option value="${esc(z)}">`).join("")}</datalist><datalist id="dl-unites">${unites.map(z=>`<option value="${esc(z)}">`).join("")}</datalist>
+  <div class="tools">
+    <input id="q" placeholder="🔍 Chercher un article…" value="${esc(A.q)}" style="width:240px">
+    <select id="fz"><option value="">Toutes les zones</option>${zones.map(z=>`<option ${z===A.zone?"selected":""}>${esc(z)}</option>`).join("")}</select>
+    <select id="ff"><option value="">Tous les fournisseurs</option>${r.fournisseurs.slice().sort((a,b)=>a.nom.localeCompare(b.nom,"fr")).map(f=>`<option value="${esc(f.id)}" ${f.id===A.fourn?"selected":""}>${esc(f.nom)}</option>`).join("")}</select>
+    <div class="chips">${[["","Tous"],["sans","Sans seuil ("+sansSeuil+")"],["avec","Avec seuil"]].map(([k,l])=>`<button class="chip" data-seuil="${k}" aria-pressed="${A.seuil===k}">${l}</button>`).join("")}</div>
+    <div class="chips">${[["actifs","Actifs"],["retires","Retirés"],["toutes","Tout"]].map(([k,l])=>`<button class="chip" data-etat="${k}" aria-pressed="${A.etat===k}">${l}</button>`).join("")}</div>
+    <span class="muted small">${vis.length} article${vis.length>1?"s":""}${vis.length>MAX?` (les ${MAX} premiers affichés : affine la recherche)`:""}</span>
+  </div>
+  <div class="scrollx"><table class="t" style="min-width:1200px"><thead><tr><th></th><th>Article</th><th>Fournisseur</th><th>Zone</th><th>Unité</th><th title="Commander si le stock est à ce niveau ou en dessous">Mini</th><th title="Quantité à avoir après la commande">Cible</th><th>Jours d'inventaire</th><th>Note</th><th>Actif</th></tr></thead><tbody id="tb">${rows||`<tr><td colspan="10" class="muted" style="padding:20px">Aucun article</td></tr>`}</tbody></table></div>
+  <div class="bulk" id="bulk" ${A.sel.size?"":"hidden"}><b></b>
+    <input id="bz" list="dl-zones" placeholder="Zone…" style="width:150px"><select id="bf"><option value="">Fournisseur…</option>${fSel("").replace('<option value="">— aucun —</option>',"")}</select>
+    <input id="bmin" placeholder="Mini" style="width:70px"><input id="bcib" placeholder="Cible" style="width:70px">
+    <span class="small">Jours :</span>${JC.map((j,i)=>`<label class="small" title="${JOURS[i]}"><input type="checkbox" data-bj="${i+1}" style="width:auto">${j}</label>`).join("")}
+    <button class="btn small sun" id="bapp">Appliquer</button><button class="btn small ghost" id="boff" style="color:inherit;border-color:currentColor">Retirer</button><button class="btn small ghost" id="bon" style="color:inherit;border-color:currentColor">Réactiver</button><button class="btn small ghost" id="bnone" style="color:inherit;border-color:currentColor;margin-left:auto">Désélectionner</button></div>
+  <p class="muted small">Mini = l'appli propose de commander quand le stock compté est à ce niveau ou en dessous ; Cible = quantité à atteindre. Jours = jours où l'article est compté (inventaire du lundi, vendredi…). Coche plusieurs articles pour tout modifier d'un coup (seuls les champs remplis dans la barre sont appliqués).</p>`;
+  const reload=()=>pArticles();
+  const majBulk=()=>{const b=$("#bulk");b.hidden=!A.sel.size;b.querySelector("b").textContent=A.sel.size+" sélectionné"+(A.sel.size>1?"s":"")};majBulk();
+  let qt;$("#q").oninput=e=>{clearTimeout(qt);qt=setTimeout(()=>{A.q=e.target.value;reload().then(()=>{const i=$("#q");i.focus();i.setSelectionRange(i.value.length,i.value.length)})},300)};
+  $("#fz").onchange=e=>{A.zone=e.target.value;reload()};$("#ff").onchange=e=>{A.fourn=e.target.value;reload()};
+  $("#main").querySelectorAll("[data-seuil]").forEach(b=>b.onclick=()=>{A.seuil=b.dataset.seuil;reload()});
+  $("#main").querySelectorAll("[data-etat]").forEach(b=>b.onclick=()=>{A.etat=b.dataset.etat;A.sel.clear();reload()});
+  const saved=()=>{const s=$("#saved");if(s){s.textContent="✓ Enregistré";clearTimeout(saved.t);saved.t=setTimeout(()=>{if($("#saved"))$("#saved").textContent=""},1500)}};
+  $("#tb").addEventListener("change",async e=>{
+    const tr=e.target.closest("tr[data-id]");if(!tr)return;const id=tr.dataset.id;
+    if(e.target.hasAttribute("data-sel")){e.target.checked?A.sel.add(id):A.sel.delete(id);tr.classList.toggle("sel",e.target.checked);majBulk();return}
+    let data;
+    if(e.target.dataset.jour){data={id,jours:[...tr.querySelectorAll("[data-jour]")].filter(c=>c.checked).map(c=>c.dataset.jour).join(",")}}
+    else{const f=e.target.dataset.f;if(!f)return;let v=e.target.type==="checkbox"?(e.target.checked?"oui":"non"):e.target.value.trim();
+      if((f==="min"||f==="cible")&&v!==""&&isNaN(+v.replace(",","."))){toast("Mets un nombre",true);e.target.value=byId[id][f];return}
+      if(f==="min"||f==="cible")v=v.replace(",",".");data={id,[f]:v}}
+    try{await call("articleSave",data);Object.assign(byId[id],data);saved();if(data.actif||data.zone!==undefined)reload()}catch(err){toast(err.message,true);reload()}
+  });
+  const bulk=async(patch,msg)=>{const ids=[...A.sel];await act(()=>Promise.all(ids.map(id=>call("articleSave",Object.assign({id},patch)))),msg);A.sel.clear();reload()};
+  $("#bapp").onclick=()=>{const p={};const z=$("#bz").value.trim(),f=$("#bf").value,mi=$("#bmin").value.trim(),ci=$("#bcib").value.trim();
+    if(z)p.zone=z;if(f)p.fournisseurId=f;if(mi)p.min=mi.replace(",",".");if(ci)p.cible=ci.replace(",",".");
+    const js=[...document.querySelectorAll("[data-bj]")].filter(c=>c.checked).map(c=>c.dataset.bj);if(js.length)p.jours=js.join(",");
+    if(!Object.keys(p).length){toast("Remplis au moins un champ de la barre",true);return}bulk(p,"Articles modifiés")};
+  $("#boff").onclick=()=>bulk({actif:"non"},"Articles retirés");$("#bon").onclick=()=>bulk({actif:"oui"},"Articles réactivés");$("#bnone").onclick=()=>{A.sel.clear();reload()};
+  $("#new").onclick=()=>dialog(`<h3>Nouvel article</h3><label class="f">Nom<input id="n-n"></label>
+    <div class="g2"><label class="f">Fournisseur<select id="n-f">${fSel(A.fourn)}</select></label><label class="f">Zone<input id="n-z" list="dl-zones" value="${esc(A.zone)}"></label></div>
+    <div class="g3"><label class="f">Unité<input id="n-u" list="dl-unites" value="unité"></label><label class="f">Mini<input id="n-mi"></label><label class="f">Cible<input id="n-ci"></label></div>
+    <div class="acts"><button class="btn ghost" data-x>Annuler</button><button class="btn" data-y>Ajouter</button></div>`,(d,close)=>{d.querySelector("#n-n").focus();d.querySelector("[data-x]").onclick=close;
+    d.querySelector("[data-y]").onclick=async()=>{try{await call("articleSave",{nom:d.querySelector("#n-n").value.trim(),fournisseurId:d.querySelector("#n-f").value,zone:d.querySelector("#n-z").value.trim(),unite:d.querySelector("#n-u").value.trim(),min:d.querySelector("#n-mi").value.trim(),cible:d.querySelector("#n-ci").value.trim(),jours:"1",actif:"oui"});toast("Article ajouté");close();reload()}catch(e){toast(e.message,true)}}});
+  $("#csv").onclick=()=>telecharger("Articles CLV.csv",[["Article","Fournisseur","Zone","Unité","Mini","Cible","Jours","Note","Actif"],...vis.map(a=>[a.nom,fo[a.fournisseurId]||"",a.zone,a.unite,a.min,a.cible,String(a.jours||"").split(",").filter(Boolean).map(j=>JOURS[j-1]).join(" "),a.note,a.actif])]);
+}
+
+// =====================================================================================  FOURNISSEURS
+const F={q:"",type:"marchandise"};
+async function pFournisseurs(){
+  const r=await call("fournisseursAdmin");
+  const fr={};r.frequences.forEach(x=>fr[x.fournisseurId]=x);
+  const q=F.q.trim().toLowerCase();
+  const vis=r.fournisseurs.filter(f=>(F.type==="tous"||f.type===F.type||(F.type==="a_classer"&&!["marchandise","frais"].includes(f.type)))&&(!q||(f.nom+" "+f.email+" "+f.note+" "+f.produits).toLowerCase().includes(q)))
+    .sort((a,b)=>((fr[b.id]&&fr[b.id].retard)?1:0)-((fr[a.id]&&fr[a.id].retard)?1:0)||(r.nbArticles[b.id]||0)-(r.nbArticles[a.id]||0)||a.nom.localeCompare(b.nom,"fr"));
+  const rythme=f=>{const x=fr[f.id];if(!x)return`<span class="muted small">—</span>`;
+    return `${x.intervalle!=null?`tous les ${Math.round(x.intervalle)} j`:`<span class="muted">${x.nb} commande${x.nb>1?"s":""}</span>`}${x.dernier?`<br><span class="small muted">dernière : ${x.dernier.slice(8,10)}/${x.dernier.slice(5,7)} (${x.depuis} j)</span>`:""}${x.retard?` <span class="pill warn">en retard</span>`:x.inactif?` <span class="pill">inactif</span>`:""}`};
+  const rows=vis.map(f=>`<tr data-id="${esc(f.id)}">
+    <td><input data-f="nom" value="${esc(f.nom)}"></td>
+    <td style="width:130px"><select data-f="type">${[["marchandise","Marchandise"],["frais","Frais généraux"],["à classer","À classer"]].map(([v,l])=>`<option value="${v}" ${(f.type===v||(v==="à classer"&&!["marchandise","frais"].includes(f.type)))?"selected":""}>${l}</option>`).join("")}</select></td>
+    <td style="width:120px"><select data-f="canal">${[["","—"],["email","Email"],["sms","SMS"],["whatsapp","WhatsApp"],["telephone","Téléphone"]].map(([v,l])=>`<option value="${v}" ${f.canal===v?"selected":""}>${l}</option>`).join("")}</select></td>
+    <td style="width:200px"><input data-f="email" value="${esc(f.email)}" placeholder="email"></td>
+    <td style="width:110px"><input data-f="telephone" value="${esc(f.telephone)}" placeholder="téléphone"></td>
+    <td style="width:130px"><input data-f="jourCommande" value="${esc(f.jourCommande)}" placeholder="ex. lundi avant 10h"></td>
+    <td style="width:100px"><input data-f="delai" value="${esc(f.delai)}" placeholder="ex. 2 jours"></td>
+    <td style="width:170px">${rythme(f)}</td>
+    <td style="width:60px;text-align:center">${r.nbArticles[f.id]?`<button class="btn small ghost" data-arts="${esc(f.id)}" title="Voir ses articles">${r.nbArticles[f.id]}</button>`:`<span class="muted">0</span>`}</td>
+    <td><input data-f="note" value="${esc(f.note)}" placeholder="note"></td></tr>`).join("");
+  $("#main").innerHTML=`<div class="top"><h1 class="grow">Fournisseurs</h1><span class="saved" id="saved"></span></div>
+  <div class="tools"><input id="q" placeholder="🔍 Chercher…" value="${esc(F.q)}" style="width:220px">
+    <div class="chips">${[["marchandise","Marchandise"],["frais","Frais généraux"],["a_classer","À classer"],["tous","Tous"]].map(([k,l])=>`<button class="chip" data-type="${k}" aria-pressed="${F.type===k}">${l}</button>`).join("")}</div>
+    <span class="muted small">${vis.length} fournisseur${vis.length>1?"s":""}</span></div>
+  <div class="scrollx"><table class="t" style="min-width:1250px"><thead><tr><th>Nom</th><th>Type</th><th>Commande par</th><th>Email</th><th>Téléphone</th><th>Jour de commande</th><th>Délai de livraison</th><th>Rythme (factures)</th><th>Articles</th><th>Note</th></tr></thead><tbody id="tb">${rows||`<tr><td colspan="10" class="muted" style="padding:20px">Aucun fournisseur</td></tr>`}</tbody></table></div>
+  <p class="muted small">Seuls les fournisseurs « Marchandise » déclenchent l'alerte « pas commandé depuis longtemps ». Le rythme vient des factures (CLV - FACTURES) et des commandes envoyées. Le délai de livraison sert au contrôle des livraisons du matin.</p>`;
+  let qt;$("#q").oninput=e=>{clearTimeout(qt);qt=setTimeout(()=>{F.q=e.target.value;pFournisseurs().then(()=>{const i=$("#q");i.focus();i.setSelectionRange(i.value.length,i.value.length)})},300)};
+  $("#main").querySelectorAll("[data-type]").forEach(b=>b.onclick=()=>{F.type=b.dataset.type;pFournisseurs()});
+  $("#main").querySelectorAll("[data-arts]").forEach(b=>b.onclick=()=>{Object.assign(A,{fourn:b.dataset.arts,zone:"",q:"",seuil:"",etat:"actifs"});view="articles";shell()});
+  $("#tb").addEventListener("change",async e=>{const tr=e.target.closest("tr[data-id]"),f=e.target.dataset.f;if(!tr||!f)return;
+    try{await call("fournisseurSave",{id:tr.dataset.id,[f]:e.target.value.trim()});const s=$("#saved");if(s){s.textContent="✓ Enregistré";setTimeout(()=>{if($("#saved"))$("#saved").textContent=""},1500)}if(f==="type")pFournisseurs()}catch(err){toast(err.message,true);pFournisseurs()}});
+}
+
+// =====================================================================================  RAPPORTS
+const R={onglet:"jour",date:null,mois:null};
+const moisLabel=m=>new Date(Date.UTC(+m.slice(0,4),+m.slice(5,7)-1,1)).toLocaleDateString("fr-FR",{month:"long",year:"numeric",timeZone:"UTC"});
+const shiftMois=(m,k)=>{const d=new Date(Date.UTC(+m.slice(0,4),+m.slice(5,7)-1+k,1));return d.getUTCFullYear()+"-"+pad(d.getUTCMonth()+1)};
+const dec=m=>(m/60).toFixed(2).replace(".",",");
+async function pRapports(){
+  const today=S.now.date;
+  if(!R.date)R.date=today;
+  if(!R.mois)R.mois=today.slice(8)<="10"?shiftMois(today.slice(0,7),-1):today.slice(0,7);
+  const tabs=`<div class="chips"><button class="chip" data-o="jour" aria-pressed="${R.onglet==="jour"}">Rapport du jour</button><button class="chip" data-o="mois" aria-pressed="${R.onglet==="mois"}">Rapport du mois (Proxima)</button></div>`;
+  if(R.onglet==="jour"){
+    const r=await call("rapportJour",{date:R.date});
+    const h=(v,n,ec)=>v?`${v}${ec>r.ecartMax?` <span class="pill warn">notée à ${n}</span>`:""}`:`<span class="muted">—</span>`;
+    const pm={};r.pasFaites.forEach(x=>(pm[x.moment]=pm[x.moment]||[]).push(x));
+    $("#main").innerHTML=`<div class="top"><h1 class="grow">Rapports</h1>${tabs}</div>
+    <div class="row" style="margin-bottom:12px"><button class="btn ghost" id="dp">‹</button><input type="date" id="dd" value="${R.date}" max="${today}"><button class="btn ghost" id="dn" ${R.date>=today?"disabled":""}>›</button><h2 class="grow" style="margin-left:8px">${dt(R.date,{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</h2><button class="btn ghost" id="csv">Télécharger (Excel)</button></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
+      <div class="card" style="grid-column:1/-1"><h3>Arrivées et départs</h3>
+        <table class="t" style="margin-top:8px"><thead><tr><th>Qui</th><th>Prévu</th><th>Arrivée</th><th>Départ</th><th>Pause</th><th></th></tr></thead><tbody>
+        ${r.personnes.map(p=>`<tr><td><b>${esc(p.prenom)}</b></td><td>${esc(p.prevu||"—")}</td><td>${h(p.arrivee,p.arriveeNotee,p.corrige?0:p.ecartArrivee)}</td><td>${h(p.depart,p.departNotee,p.corrige?0:p.ecartDepart)}</td><td>${p.pause?p.pause+" min":"—"}</td><td class="small muted">${p.corrige?"corrigé":""}</td></tr>`).join("")||`<tr><td colspan="6" class="muted">Personne au planning.</td></tr>`}</tbody></table></div>
+      <div class="card"><h3>Tâches faites (${r.faites.length})</h3><table class="t" style="margin-top:8px"><thead><tr><th>Heure</th><th>Qui</th><th>Tâche</th><th>Moment</th></tr></thead><tbody>${r.faites.map(f=>`<tr><td><b>${f.heure}</b></td><td>${esc(f.par)}</td><td>${esc(f.titre)}</td><td class="small muted">${esc(f.moment)}</td></tr>`).join("")||`<tr><td colspan="4" class="muted">Aucune.</td></tr>`}</tbody></table></div>
+      <div class="card"><h3>Pas faites (${r.pasFaites.length})</h3>${Object.keys(pm).map(m=>`<div class="small" style="font-weight:700;margin-top:10px">${esc(m)}</div>${pm[m].map(x=>`<div class="small">• ${esc(x.titre)}${x.freq!=="jour"?` <span class="pill ${x.retard?"warn":"info"}">${x.freq==="semaine"?"hebdo":"mensuel"}</span>`:""}</div>`).join("")}`).join("")||`<p class="muted">Tout est fait 🎉</p>`}</div>
+    </div>`;
+    const go=d=>{R.date=d;pRapports()};
+    $("#dp").onclick=()=>go(addDays(R.date,-1));$("#dn").onclick=()=>go(addDays(R.date,1));$("#dd").onchange=e=>e.target.value&&go(e.target.value);
+    $("#csv").onclick=()=>telecharger(`Rapport du jour ${R.date}.csv`,[["Rapport du "+R.date],[],["Qui","Prévu","Arrivée","notée à","Départ","noté à","Pause (min)"],...r.personnes.map(p=>[p.prenom,p.prevu,p.arrivee,p.arriveeNotee,p.depart,p.departNotee,p.pause]),[],["Heure","Qui","Tâche faite","Moment"],...r.faites.map(f=>[f.heure,f.par,f.titre,f.moment]),[],["Tâche pas faite","Moment"],...r.pasFaites.map(f=>[f.titre,f.moment])]);
+  }else{
+    const r=await call("rapport",{mois:R.mois});const L=r.lignes;
+    const reposTxt=o=>Object.keys(o).map(k=>o[k]+" j "+k.toLowerCase()).join(", ")||"—";
+    $("#main").innerHTML=`<div class="top"><h1 class="grow">Rapports</h1>${tabs}</div>
+    <div class="row" style="margin-bottom:12px"><button class="btn ghost" id="mp">‹</button><h2 style="min-width:200px;text-align:center;text-transform:capitalize">${moisLabel(R.mois)}</h2><button class="btn ghost" id="mn">›</button><span class="grow"></span><button class="btn ghost" id="cp">Copier</button><button class="btn" id="csv">Télécharger (Excel)</button></div>
+    <div class="card"><div class="small muted" style="margin-bottom:8px">${esc(r.entreprise==="CLV"?"SUNSHINE COFFEE (Café La Victoria)":r.entreprise)} · base mensuelle ${r.base},00 h · généré le ${r.genereLe.slice(8,10)}/${r.genereLe.slice(5,7)} à ${r.genereLe.slice(11,16)}</div>
+    <table class="t"><thead><tr><th>Salarié</th><th>Heures</th><th>Jours</th><th>HS 25 %</th><th>HS 50 %</th><th>H. compl.</th><th>Repos / absences</th><th>À vérifier</th>${r.semaines.map(l=>`<th>Sem. ${l.slice(8,10)}/${l.slice(5,7)}</th>`).join("")}</tr></thead>
+    <tbody>${L.map(l=>`<tr><td><b>${esc(l.nom)}</b></td><td>${dec(l.minMois)}</td><td>${l.jours}</td><td><b>${dec(l.hs25)}</b></td><td><b>${dec(l.hs50)}</b></td><td>${dec(l.comp)}</td><td class="small">${esc(reposTxt(l.repos))}</td>
+      <td class="small">${[l.prevus.length?l.prevus.length+" j sans pointage":"",l.incomplets.length?l.incomplets.length+" départ(s) manquant(s)":"",l.ecarts&&l.ecarts.length?l.ecarts.length+" j noté(s) en décalé":""].filter(Boolean).map(x=>`<span class="pill warn">${x}</span>`).join(" ")||`<span class="pill ok">OK</span>`}</td>
+      ${l.semaines.map(s=>`<td class="small">${dur(s.min)}${s.hs25||s.hs50?`<br><span class="muted">+${dec(s.hs25+s.hs50)} HS</span>`:""}</td>`).join("")}</tr>`).join("")||`<tr><td colspan="8" class="muted">Aucune heure ce mois-ci.</td></tr>`}</tbody></table>
+    <p class="muted small">Heures en décimal (7,50 = 7 h 30), pauses non payées déduites. HS par semaine (lundi → dimanche) au-delà de 39 h : +25 % jusqu'à 47 h, +50 % au-delà ; une semaine compte dans le mois de son dimanche. Le mail à social@proxima.nc reste à envoyer par toi.</p></div>`;
+    const lignes=[["Salarié","Heures travaillées","Jours travaillés","HS 25 %","HS 50 %","Heures complémentaires","Repos / absences","Jours sans pointage"],...L.map(l=>[l.nom,dec(l.minMois),l.jours,dec(l.hs25),dec(l.hs50),dec(l.comp),reposTxt(l.repos),l.prevus.length])];
+    $("#mp").onclick=()=>{R.mois=shiftMois(R.mois,-1);pRapports()};$("#mn").onclick=()=>{R.mois=shiftMois(R.mois,1);pRapports()};
+    $("#csv").onclick=()=>telecharger(`Heures ${r.entreprise} ${R.mois}.csv`,[["Rapport heures "+moisLabel(R.mois)+" — base "+r.base+" h"],[],...lignes]);
+    $("#cp").onclick=async()=>{try{await navigator.clipboard.writeText(lignes.map(x=>x.join("\t")).join("\n"));toast("Copié : colle-le dans Excel ou un mail")}catch(e){toast("Copie impossible",true)}};
+  }
+  $("#main").querySelectorAll("[data-o]").forEach(b=>b.onclick=()=>{R.onglet=b.dataset.o;pRapports()});
+}
+
+// =====================================================================================  ÉQUIPE
+async function pEquipe(){
+  const list=await call("employes");
+  const ROLES=[["employe","Employé"],["admin","Admin (gérant)"],["test","Compte test"]];
+  const rows=list.map(e=>`<tr data-id="${esc(e.id)}" class="${e.actif==="non"?"off":""}">
+    <td><input data-f="prenom" value="${esc(e.prenom)}"></td><td><input data-f="nom" value="${esc(e.nom)}"></td>
+    <td style="width:210px"><input data-f="email" value="${esc(e.email)}" placeholder="email"></td>
+    <td style="width:170px"><select data-f="posteId"><option value="">—</option>${S.postes.map(p=>`<option value="${esc(p.id)}" ${p.id===e.posteId?"selected":""}>${esc(p.nom)}</option>`).join("")}</select></td>
+    <td style="width:150px"><select data-f="role" ${e.id===S.me.id?"disabled title=\"Ton propre compte reste admin\"":""}>${ROLES.map(([v,l])=>`<option value="${v}" ${(e.role||"employe")===v?"selected":""}>${l}</option>`).join("")}</select></td>
+    <td style="width:100px"><input data-f="baseHebdo" value="${esc(e.baseHebdo)}" title="Heures par semaine au contrat (39 = temps plein)"></td>
+    <td style="width:110px"><select data-f="actif" ${e.id===S.me.id?"disabled":""}><option value="oui" ${e.actif!=="non"?"selected":""}>Oui</option><option value="non" ${e.actif==="non"?"selected":""}>Parti·e</option></select></td>
+    <td style="width:150px">${e.aUnCode?"":`<span class="pill warn">pas de code</span> `}<button class="btn small ghost" data-code="${esc(e.id)}">Nouveau code</button></td></tr>`).join("");
+  $("#main").innerHTML=`<div class="top"><h1 class="grow">Équipe</h1><span class="saved" id="saved"></span><button class="btn" id="new">+ Nouvelle personne</button></div>
+  <div class="scrollx"><table class="t" style="min-width:1100px"><thead><tr><th>Prénom</th><th>Nom</th><th>Email</th><th>Poste</th><th>Rôle</th><th>H/semaine</th><th>Active</th><th>Code</th></tr></thead><tbody id="tb">${rows}</tbody></table></div>
+  <p class="muted small">H/semaine : 39 = temps plein ; en dessous, les heures jusqu'à 39 h comptent en heures complémentaires dans le rapport Proxima. Un compte test n'apparaît dans aucun rapport. Une personne « partie » ne peut plus se connecter.</p>`;
+  $("#tb").addEventListener("change",async e=>{const tr=e.target.closest("tr[data-id]"),f=e.target.dataset.f;if(!tr||!f)return;
+    try{await call("employeSave",{id:tr.dataset.id,[f]:e.target.value.trim()});const s=$("#saved");if(s){s.textContent="✓ Enregistré";setTimeout(()=>{if($("#saved"))$("#saved").textContent=""},1500)}S=await call("boot");if(f==="actif")pEquipe()}catch(err){toast(err.message,true);pEquipe()}});
+  const montrer=(prenom,pin)=>dialog(`<h3>Code de ${esc(prenom)}</h3><p style="font-size:2.4rem;font-family:var(--display);letter-spacing:.3em;text-align:center;margin:10px 0">${esc(pin)}</p><p class="muted small">Donne-le à ${esc(prenom)}. Il ne sera plus affiché ensuite. ${esc(prenom)} pourra le changer dans l'appli (Accueil › Changer mon code).</p><div class="acts"><button class="btn" data-x>J'ai noté</button></div>`,(d,close)=>{d.querySelector("[data-x]").onclick=close});
+  $("#main").querySelectorAll("[data-code]").forEach(b=>b.onclick=()=>{const e=list.find(x=>x.id===b.dataset.code);
+    confirmer("Faire un nouveau code pour "+e.prenom+" ?","L'ancien code ne marchera plus et "+e.prenom+" devra se reconnecter.","Nouveau code",async()=>{const r=await act(()=>call("employeSave",{id:e.id,nouveauCode:true}));montrer(e.prenom,r.pin);pEquipe()})});
+  $("#new").onclick=()=>dialog(`<h3>Nouvelle personne</h3><div class="g2"><label class="f">Prénom<input id="n-p"></label><label class="f">Nom<input id="n-n"></label></div>
+    <div class="g2"><label class="f">Poste<select id="n-po"><option value="">—</option>${S.postes.map(p=>`<option value="${esc(p.id)}">${esc(p.nom)}</option>`).join("")}</select></label><label class="f">H/semaine<input id="n-h" value="39"></label></div>
+    <div class="acts"><button class="btn ghost" data-x>Annuler</button><button class="btn" data-y>Ajouter</button></div>`,(d,close)=>{d.querySelector("#n-p").focus();d.querySelector("[data-x]").onclick=close;
+    d.querySelector("[data-y]").onclick=async()=>{try{const p=d.querySelector("#n-p").value.trim();const r=await call("employeSave",{prenom:p,nom:d.querySelector("#n-n").value.trim(),posteId:d.querySelector("#n-po").value,baseHebdo:d.querySelector("#n-h").value.trim(),role:"employe",actif:"oui"});close();S=await call("boot");montrer(p,r.pin);pEquipe()}catch(e){toast(e.message,true)}}});
 }
 
 // ---------- démarrage
