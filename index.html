@@ -218,7 +218,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-14e";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-14f";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -489,10 +489,11 @@ function shiftSheet(s,w){
   ${isNew||d>today()?"":`<hr style="border:0;border-top:1px solid var(--line);width:100%">
   <h3 style="font-size:1.1rem">Heures réelles</h3>${p&&(p.arriveeNotee||p.departNotee)?`<p class="hint">${p.arriveeNotee?`Arrivée ${p.arrivee} notée à ${p.arriveeNotee.slice(11,16)}`:""}${p.departNotee?` · départ ${p.depart} noté à ${p.departNotee.slice(11,16)}`:""}</p>`:""}<p class="hint">${p&&p.arrivee?"Pointé par "+esc(empName(s.empId))+(p.corrigePar?" · corrigé par "+esc(p.corrigePar):""):"Pas de pointage : les heures prévues comptent dans le rapport."}</p>
   <div class="grid3"><label class="f">Arrivée<input id="p-arr" type="time" value="${esc(p&&p.arrivee||"")}"></label><label class="f">Départ<input id="p-dep" type="time" value="${esc(p&&p.depart||"")}"></label><label class="f">Pause (min)<input id="p-pau" type="number" inputmode="numeric" min="0" placeholder="${esc(s.pause||"0")}" value="${esc(p&&p.pause||"")}"></label></div>
-  <button class="btn ghost" id="p-ok">Corriger le pointage</button>`}`,()=>{
+  <button class="btn ghost" id="p-ok">Corriger le pointage</button>${p?`<button class="btn ghost" id="p-del" style="margin-top:6px">Effacer le pointage</button>`:""}`}`,()=>{
     const err=m=>{$("#f-err").hidden=false;$("#f-err").textContent=m};
     $("#f-ok").onclick=async()=>{try{await call("shiftSave",{id:s.id,empId:$("#f-emp").value,date:d,debut:$("#f-deb").value,fin:$("#f-fin").value,pause:$("#f-pau").value,posteId:$("#f-poste").value,note:$("#f-note").value});toast("Enregistré");go("planning")}catch(e){err(e.message)}};
     const del=$("#f-del");if(del)del.onclick=async()=>{await act(()=>call("shiftDelete",{id:s.id}),"Poste supprimé");go("planning")};
+    const pdl=$("#p-del");if(pdl)pdl.onclick=()=>confirmSheet("Effacer ce pointage ?","Arrivée, pause et départ de "+empName(s.empId)+" ce jour-là sont supprimés.","Effacer",async()=>{await act(()=>call("pointageSupprimer",{empId:s.empId,date:d}),"Pointage effacé");cache.weeks={};go("planning")});
     const pk=$("#p-ok");if(pk)pk.onclick=async()=>{try{await call("pointageSave",{empId:s.empId,date:d,arrivee:$("#p-arr").value,depart:$("#p-dep").value,pause:$("#p-pau").value});toast("Pointage corrigé");go("planning")}catch(e){err(e.message)}};
   });
 }
