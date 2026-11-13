@@ -42,7 +42,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--lagoon);outline-
 .pill.ok{background:var(--ok-soft);color:var(--ok)} .pill.warn{background:var(--warn-soft);color:var(--warn)} .pill.info{background:var(--lagoon-soft);color:var(--lagoon)}
 
 /* mise en page : menu à gauche */
-.shell{display:grid;grid-template-columns:220px 1fr;height:100vh}
+.shell{display:grid;grid-template-columns:200px 1fr;height:100vh}
+.stack{display:flex;flex-direction:column;gap:2px}
 .side{background:var(--surface);border-right:1px solid var(--line);padding:18px 12px;display:flex;flex-direction:column;gap:4px}
 .side .logo{display:flex;gap:10px;align-items:center;padding:0 6px 16px}
 .side .logo img{width:40px;height:40px;border-radius:50%}
@@ -53,7 +54,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--lagoon);outline-
 .nav .n{margin-left:auto;background:var(--sun);color:#2b2100;border-radius:99px;font-size:.72rem;padding:0 7px}
 .nav.later{opacity:.45;cursor:default}
 .side .bas{margin-top:auto;font-size:.8rem;color:var(--muted);padding:6px}
-.main{overflow:auto;padding:22px 28px 60px}
+.main{overflow:auto;padding:22px 22px 60px}
 .top{display:flex;align-items:center;gap:14px;margin-bottom:16px;flex-wrap:wrap}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px}
 
@@ -65,11 +66,14 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--lagoon);outline-
 .tgrid{display:grid;grid-template-columns:1fr 300px;gap:16px;align-items:start}
 @media (max-width:1550px){.tgrid{grid-template-columns:1fr}.tgrid aside{flex-direction:row!important;flex-wrap:wrap}.tgrid aside .card{flex:1;min-width:300px}}
 .scrollx{overflow-x:auto;border-radius:14px}
-table.t{width:100%;border-collapse:separate;border-spacing:0;background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+table.t{width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0;background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
 table.t th{position:sticky;top:0;background:var(--soft);text-align:left;font-size:.78rem;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);padding:8px 6px;z-index:1}
 table.t td{border-top:1px solid var(--line);padding:4px 6px;vertical-align:middle}
-table.t td:nth-child(3){min-width:280px}
-table.t td:nth-child(4){min-width:180px}
+table.t td textarea{overflow-wrap:anywhere;width:100%;resize:none;border:1px solid transparent;background:transparent;padding:5px 6px;font:inherit;line-height:1.3;overflow:hidden;min-height:30px;display:block;border-radius:8px}
+table.t td textarea:hover{border-color:var(--line)}
+table.t td input[data-f="zone"]{font-size:.86rem}
+table.t td select{padding-right:20px;text-overflow:ellipsis}
+table.t th{white-space:normal;line-height:1.2}
 table.t td input,table.t td select{width:100%;border-color:transparent;background:transparent;padding:5px 6px}
 table.t td input:hover,table.t td select:hover{border-color:var(--line)}
 table.t tr.grp td{background:var(--soft);font-family:var(--display);font-weight:600;padding:8px 10px}
@@ -90,13 +94,13 @@ table.t tr.drag-over td{box-shadow:inset 0 2px 0 var(--lagoon)}
 .pgrid{display:grid;gap:0;background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
 .pgrid .h{background:var(--soft);font-weight:700;font-size:.85rem;padding:8px;border-bottom:1px solid var(--line)}
 .pgrid .h.today{background:var(--lagoon-soft);color:var(--lagoon)}
-.pgrid .who{padding:8px 10px;border-top:1px solid var(--line);font-weight:600;display:flex;flex-direction:column;justify-content:center}
+.pgrid .who{min-width:0;overflow-wrap:anywhere;padding:8px 10px;border-top:1px solid var(--line);font-weight:600;display:flex;flex-direction:column;justify-content:center}
 .pgrid .who small{font-weight:500;color:var(--muted)}
-.cell{border-top:1px solid var(--line);border-left:1px solid var(--line);padding:5px;min-height:62px;display:flex;flex-direction:column;gap:4px;cursor:copy}
+.cell{border-top:1px solid var(--line);border-left:1px solid var(--line);padding:5px;min-height:62px;min-width:0;display:flex;flex-direction:column;gap:4px;cursor:copy}
 .cell:hover{background:var(--soft)}
 .cell.over{background:var(--lagoon-soft);outline:2px dashed var(--lagoon);outline-offset:-3px}
 .cell.weekend{background:color-mix(in srgb,var(--soft) 45%,transparent)}
-.sh{border:0;text-align:left;border-radius:8px;padding:5px 7px;background:color-mix(in srgb,var(--c) 22%,var(--surface));border-left:4px solid var(--c);cursor:grab;font-size:.82rem;line-height:1.25}
+.sh{width:100%;min-width:0;overflow-wrap:anywhere;border:0;text-align:left;border-radius:8px;padding:5px 7px;background:color-mix(in srgb,var(--c) 22%,var(--surface));border-left:4px solid var(--c);cursor:grab;font-size:.82rem;line-height:1.25}
 .sh b{display:block;font-size:.88rem}
 .sh .pt{display:block;color:var(--ok);font-weight:600}
 .sh .pt.warn{color:var(--warn)}
@@ -162,6 +166,9 @@ function call(a,d){
   if(a==="login")return send({action:a,data:d});
   return new Promise((ok,ko)=>{file.push({a,d:d||{},ok,ko});if(file.length===1)setTimeout(flush,0)}).catch(e=>{if(e.message==="SESSION"){logout();throw new Error("Reconnecte-toi")}throw e});
 }
+function autoH(root){(root||document).querySelectorAll('textarea[data-auto]').forEach(t=>{t.style.height='auto';t.style.height=t.scrollHeight+'px'})}
+document.addEventListener('input',e=>{if(e.target.matches&&e.target.matches('textarea[data-auto]')){e.target.style.height='auto';e.target.style.height=e.target.scrollHeight+'px'}});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches&&e.target.matches('textarea[data-auto]')){e.preventDefault();e.target.blur()}});
 function toast(m,bad){const t=$("#toast");t.textContent=m;t.className="toast"+(bad?" bad":"");t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>t.hidden=true,bad?4500:1800)}
 async function act(fn,ok){try{const r=await fn();if(ok)toast(ok);return r}catch(e){toast(e.message,true);throw e}}
 function dialog(html,bind){const s=document.createElement("div");s.className="scrim";s.innerHTML=`<div class="dlg">${html}</div>`;document.body.appendChild(s);
@@ -215,20 +222,21 @@ async function pTaches(){
   const mx=Math.max(1,...charge);
   const quand=t=>t.freq==="semaine"?`<select data-f="jour">${JOURS.map((j,i)=>`<option value="${i+1}" ${String(i+1)===String(t.jour)?"selected":""}>${j}</option>`).join("")}</select>`
     :t.freq==="mois"?`<input data-f="repere" value="${esc(t.repere)}" placeholder="1er lundi">`:`<span class="muted small">—</span>`;
+  const avecJour=T.freq!=="jour";
   let rows="",cur=null;
   vis.forEach(t=>{
     const g=t.moment+"|"+t.freq;
-    if(g!==cur){cur=g;rows+=`<tr class="grp"><td colspan="9">${esc(t.moment||"Sans moment")} <span class="pill">${FREQ[t.freq]||t.freq}</span></td></tr>`}
+    if(g!==cur){cur=g;rows+=`<tr class="grp"><td colspan="${avecJour?9:8}">${esc(t.moment||"Sans moment")} <span class="pill">${FREQ[t.freq]||t.freq}</span></td></tr>`}
     rows+=`<tr data-id="${esc(t.id)}" data-g="${esc(g)}" class="${t.actif==="non"?"off":""} ${T.sel.has(t.id)?"sel":""}">
-      <td style="width:28px"><input type="checkbox" data-sel ${T.sel.has(t.id)?"checked":""} style="width:auto"></td>
-      <td class="handle" title="Glisser pour changer l'ordre" style="width:22px">${q?"":"⠿"}</td>
-      <td><input data-f="titre" value="${esc(t.titre)}"></td>
-      <td><input data-f="note" value="${esc(t.note)}" placeholder="détails"></td>
-      <td style="width:130px"><select data-f="moment">${[...new Set([...MOMENTS,t.moment])].map(m=>`<option ${m===t.moment?"selected":""}>${esc(m)}</option>`).join("")}</select></td>
-      <td style="width:118px"><select data-f="freq">${Object.keys(FREQ).map(k=>`<option value="${k}" ${k===t.freq?"selected":""}>${FREQ[k]}</option>`).join("")}</select></td>
-      <td style="width:120px">${quand(t)}</td>
-      <td style="width:150px"><input data-f="section" value="${esc(t.section)}" placeholder="rubrique"></td>
-      <td style="width:70px;text-align:center"><input type="checkbox" data-f="actif" ${t.actif!=="non"?"checked":""} style="width:auto" title="Active"></td></tr>`;
+      <td><input type="checkbox" data-sel ${T.sel.has(t.id)?"checked":""} style="width:auto"></td>
+      <td class="handle" title="Glisser pour changer l'ordre">${q?"":"⠿"}</td>
+      <td><textarea data-auto data-f="titre" rows="1">${esc(t.titre)}</textarea></td>
+      <td><textarea data-auto data-f="note" rows="1" placeholder="détails">${esc(t.note)}</textarea></td>
+      <td><select data-f="moment">${[...new Set([...MOMENTS,t.moment])].map(m=>`<option ${m===t.moment?"selected":""}>${esc(m)}</option>`).join("")}</select></td>
+      <td><select data-f="freq">${Object.keys(FREQ).map(k=>`<option value="${k}" ${k===t.freq?"selected":""}>${FREQ[k]}</option>`).join("")}</select></td>
+      ${avecJour?`<td>${quand(t)}</td>`:""}
+      <td><textarea data-auto data-f="section" rows="1" placeholder="rubrique">${esc(t.section)}</textarea></td>
+      <td style="text-align:center"><input type="checkbox" data-f="actif" ${t.actif!=="non"?"checked":""} style="width:auto" title="Active"></td></tr>`;
   });
   $("#main").innerHTML=`<div class="top"><h1 class="grow">Tâches</h1><span class="saved" id="saved"></span><button class="btn" id="new">+ Nouvelle tâche</button></div>
   <div class="tools">
@@ -239,7 +247,7 @@ async function pTaches(){
     <span class="muted small">${vis.length} tâche${vis.length>1?"s":""}</span>
   </div>
   <div class="tgrid"><div>
-    <div class="scrollx"><table class="t" style="min-width:1000px"><thead><tr><th></th><th></th><th>Tâche</th><th>Détails</th><th>Moment</th><th>Fréquence</th><th>Jour</th><th>Rubrique</th><th>Active</th></tr></thead><tbody id="tb">${rows||`<tr><td colspan="9" class="muted" style="padding:20px">Aucune tâche</td></tr>`}</tbody></table></div>
+    <div class="scrollx"><table class="t" style="min-width:1000px"><colgroup><col style="width:32px"><col style="width:26px"><col><col style="width:24%"><col style="width:138px"><col style="width:130px">${avecJour?'<col style="width:120px">':""}<col style="width:15%"><col style="width:66px"></colgroup><thead><tr><th></th><th></th><th>Tâche</th><th>Détails</th><th>Moment</th><th>Fréquence</th>${avecJour?"<th>Jour</th>":""}<th>Rubrique</th><th>Active</th></tr></thead><tbody id="tb">${rows||`<tr><td colspan="${avecJour?9:8}" class="muted" style="padding:20px">Aucune tâche</td></tr>`}</tbody></table></div>
     <div class="bulk" id="bulk" ${T.sel.size?"":"hidden"}><b>${T.sel.size} sélectionnée${T.sel.size>1?"s":""}</b>
       <select id="bj"><option value="">Mettre le jour…</option>${JOURS.map((j,i)=>`<option value="${i+1}">${j}</option>`).join("")}</select>
       <select id="bm"><option value="">Mettre le moment…</option>${MOMENTS.map(m=>`<option>${m}</option>`).join("")}</select>
@@ -251,6 +259,7 @@ async function pTaches(){
     <div class="card"><h3>Suggestions de l'équipe</h3>${att.length?att.map(x=>`<div class="sugg"><b>${esc(x.titre)}</b><div class="small muted">${esc(x.par)} · ${esc(x.moment||"—")} · ${FREQ[x.freq]||""}</div>${x.note?`<div class="small">${esc(x.note)}</div>`:""}<div class="row" style="margin-top:6px"><button class="btn small" data-sok="${esc(x.id)}">Ajouter</button><button class="btn small ghost" data-sno="${esc(x.id)}">Refuser</button></div></div>`).join(""):`<p class="muted small">Aucune suggestion en attente.</p>`}</div>
     <div class="card"><h3>Tâches hebdo par jour</h3><div class="load">${charge.map((n,i)=>`<div><i style="height:${Math.round(n/mx*44)+2}px"></i>${JOURS[i].slice(0,3)}<br><b>${n}</b></div>`).join("")}</div><p class="muted small">Pour équilibrer : filtre « Hebdo », sélectionne des tâches et change leur jour.</p></div>
   </aside></div>`;
+  autoH($("#main"));
   const reload=()=>pTaches();
   $("#main").querySelectorAll("[data-freq]").forEach(b=>b.onclick=()=>{T.freq=b.dataset.freq;T.sel.clear();reload()});
   $("#main").querySelectorAll("[data-etat]").forEach(b=>b.onclick=()=>{T.etat=b.dataset.etat;T.sel.clear();reload()});
@@ -423,16 +432,16 @@ async function pArticles(){
     if(a.zone!==cur){cur=a.zone;rows+=`<tr class="grp"><td colspan="10">${esc(a.zone||"Sans zone")}</td></tr>`}
     const js=String(a.jours||"").split(",").filter(Boolean);
     rows+=`<tr data-id="${esc(a.id)}" class="${a.actif==="non"?"off":""} ${A.sel.has(a.id)?"sel":""}">
-      <td style="width:28px"><input type="checkbox" data-sel ${A.sel.has(a.id)?"checked":""} style="width:auto"></td>
-      <td><input data-f="nom" value="${esc(a.nom)}"></td>
-      <td style="width:190px"><select data-f="fournisseurId">${fSel(a.fournisseurId)}</select></td>
-      <td style="width:160px"><input data-f="zone" value="${esc(a.zone)}" list="dl-zones"></td>
-      <td style="width:120px"><input data-f="unite" value="${esc(a.unite)}" list="dl-unites"></td>
-      <td style="width:70px"><input data-f="min" value="${esc(a.min)}" inputmode="decimal" placeholder="—" title="Commander si le stock est à ce niveau ou en dessous"></td>
-      <td style="width:70px"><input data-f="cible" value="${esc(a.cible)}" inputmode="decimal" placeholder="—" title="Quantité à avoir après la commande"></td>
-      <td style="width:150px;white-space:nowrap">${JC.map((j,i)=>`<label title="${JOURS[i]}" style="display:inline-flex;flex-direction:column;align-items:center;font-size:.7rem;color:var(--muted);margin-right:2px">${j}<input type="checkbox" data-jour="${i+1}" ${js.includes(String(i+1))?"checked":""} style="width:auto;margin:0"></label>`).join("")}</td>
-      <td style="width:160px"><input data-f="note" value="${esc(a.note)}" placeholder="note"></td>
-      <td style="width:54px;text-align:center"><input type="checkbox" data-f="actif" ${a.actif!=="non"?"checked":""} style="width:auto"></td></tr>`;
+      <td><input type="checkbox" data-sel ${A.sel.has(a.id)?"checked":""} style="width:auto"></td>
+      <td><textarea data-auto data-f="nom" rows="1">${esc(a.nom)}</textarea></td>
+      <td><select data-f="fournisseurId">${fSel(a.fournisseurId)}</select></td>
+      <td><input data-f="zone" value="${esc(a.zone)}" list="dl-zones" title="${esc(a.zone)}"></td>
+      <td><textarea data-auto data-f="unite" rows="1">${esc(a.unite)}</textarea></td>
+      <td><input data-f="min" value="${esc(a.min)}" inputmode="decimal" placeholder="—" title="Commander si le stock est à ce niveau ou en dessous"></td>
+      <td><input data-f="cible" value="${esc(a.cible)}" inputmode="decimal" placeholder="—" title="Quantité à avoir après la commande"></td>
+      <td style="white-space:nowrap">${JC.map((j,i)=>`<label title="${JOURS[i]}" style="display:inline-flex;flex-direction:column;align-items:center;font-size:.7rem;color:var(--muted);margin-right:2px">${j}<input type="checkbox" data-jour="${i+1}" ${js.includes(String(i+1))?"checked":""} style="width:auto;margin:0"></label>`).join("")}</td>
+      <td><textarea data-auto data-f="note" rows="1" placeholder="note">${esc(a.note)}</textarea></td>
+      <td style="text-align:center"><input type="checkbox" data-f="actif" ${a.actif!=="non"?"checked":""} style="width:auto"></td></tr>`;
   });
   $("#main").innerHTML=`<div class="top"><h1 class="grow">Articles de l'inventaire</h1><span class="saved" id="saved"></span><button class="btn ghost" id="csv">Télécharger (Excel)</button><button class="btn" id="new">+ Nouvel article</button></div>
   <datalist id="dl-zones">${zones.map(z=>`<option value="${esc(z)}">`).join("")}</datalist><datalist id="dl-unites">${unites.map(z=>`<option value="${esc(z)}">`).join("")}</datalist>
@@ -444,13 +453,14 @@ async function pArticles(){
     <div class="chips">${[["actifs","Actifs"],["retires","Retirés"],["toutes","Tout"]].map(([k,l])=>`<button class="chip" data-etat="${k}" aria-pressed="${A.etat===k}">${l}</button>`).join("")}</div>
     <span class="muted small">${vis.length} article${vis.length>1?"s":""}${vis.length>MAX?` (les ${MAX} premiers affichés : affine la recherche)`:""}</span>
   </div>
-  <div class="scrollx"><table class="t" style="min-width:1200px"><thead><tr><th></th><th>Article</th><th>Fournisseur</th><th>Zone</th><th>Unité</th><th title="Commander si le stock est à ce niveau ou en dessous">Mini</th><th title="Quantité à avoir après la commande">Cible</th><th>Jours d'inventaire</th><th>Note</th><th>Actif</th></tr></thead><tbody id="tb">${rows||`<tr><td colspan="10" class="muted" style="padding:20px">Aucun article</td></tr>`}</tbody></table></div>
+  <div class="scrollx"><table class="t" style="min-width:1080px"><colgroup><col style="width:32px"><col><col style="width:160px"><col style="width:196px"><col style="width:104px"><col style="width:58px"><col style="width:58px"><col style="width:146px"><col style="width:11%"><col style="width:50px"></colgroup><thead><tr><th></th><th>Article</th><th>Fournisseur</th><th>Zone</th><th>Unité</th><th title="Commander si le stock est à ce niveau ou en dessous">Mini</th><th title="Quantité à avoir après la commande">Cible</th><th>Jours d'inventaire</th><th>Note</th><th>Actif</th></tr></thead><tbody id="tb">${rows||`<tr><td colspan="10" class="muted" style="padding:20px">Aucun article</td></tr>`}</tbody></table></div>
   <div class="bulk" id="bulk" ${A.sel.size?"":"hidden"}><b></b>
     <input id="bz" list="dl-zones" placeholder="Zone…" style="width:150px"><select id="bf"><option value="">Fournisseur…</option>${fSel("").replace('<option value="">— aucun —</option>',"")}</select>
     <input id="bmin" placeholder="Mini" style="width:70px"><input id="bcib" placeholder="Cible" style="width:70px">
     <span class="small">Jours :</span>${JC.map((j,i)=>`<label class="small" title="${JOURS[i]}"><input type="checkbox" data-bj="${i+1}" style="width:auto">${j}</label>`).join("")}
     <button class="btn small sun" id="bapp">Appliquer</button><button class="btn small ghost" id="boff" style="color:inherit;border-color:currentColor">Retirer</button><button class="btn small ghost" id="bon" style="color:inherit;border-color:currentColor">Réactiver</button><button class="btn small ghost" id="bnone" style="color:inherit;border-color:currentColor;margin-left:auto">Désélectionner</button></div>
   <p class="muted small">Mini = l'appli propose de commander quand le stock compté est à ce niveau ou en dessous ; Cible = quantité à atteindre. Jours = jours où l'article est compté (inventaire du lundi, vendredi…). Coche plusieurs articles pour tout modifier d'un coup (seuls les champs remplis dans la barre sont appliqués).</p>`;
+  autoH($("#main"));
   const reload=()=>pArticles();
   const majBulk=()=>{const b=$("#bulk");b.hidden=!A.sel.size;b.querySelector("b").textContent=A.sel.size+" sélectionné"+(A.sel.size>1?"s":"")};majBulk();
   let qt;$("#q").oninput=e=>{clearTimeout(qt);qt=setTimeout(()=>{A.q=e.target.value;reload().then(()=>{const i=$("#q");i.focus();i.setSelectionRange(i.value.length,i.value.length)})},300)};
@@ -493,22 +503,21 @@ async function pFournisseurs(){
   const rythme=f=>{const x=fr[f.id];if(!x)return`<span class="muted small">—</span>`;
     return `${x.intervalle!=null?`tous les ${Math.round(x.intervalle)} j`:`<span class="muted">${x.nb} commande${x.nb>1?"s":""}</span>`}${x.dernier?`<br><span class="small muted">dernière : ${x.dernier.slice(8,10)}/${x.dernier.slice(5,7)} (${x.depuis} j)</span>`:""}${x.retard?` <span class="pill warn">en retard</span>`:x.inactif?` <span class="pill">inactif</span>`:""}`};
   const rows=vis.map(f=>`<tr data-id="${esc(f.id)}">
-    <td><input data-f="nom" value="${esc(f.nom)}"></td>
-    <td style="width:130px"><select data-f="type">${[["marchandise","Marchandise"],["frais","Frais généraux"],["à classer","À classer"]].map(([v,l])=>`<option value="${v}" ${(f.type===v||(v==="à classer"&&!["marchandise","frais"].includes(f.type)))?"selected":""}>${l}</option>`).join("")}</select></td>
-    <td style="width:120px"><select data-f="canal">${[["","—"],["email","Email"],["sms","SMS"],["whatsapp","WhatsApp"],["telephone","Téléphone"]].map(([v,l])=>`<option value="${v}" ${f.canal===v?"selected":""}>${l}</option>`).join("")}</select></td>
-    <td style="width:200px"><input data-f="email" value="${esc(f.email)}" placeholder="email"></td>
-    <td style="width:110px"><input data-f="telephone" value="${esc(f.telephone)}" placeholder="téléphone"></td>
-    <td style="width:130px"><input data-f="jourCommande" value="${esc(f.jourCommande)}" placeholder="ex. lundi avant 10h"></td>
-    <td style="width:100px"><input data-f="delai" value="${esc(f.delai)}" placeholder="ex. 2 jours"></td>
-    <td style="width:170px">${rythme(f)}</td>
-    <td style="width:60px;text-align:center">${r.nbArticles[f.id]?`<button class="btn small ghost" data-arts="${esc(f.id)}" title="Voir ses articles">${r.nbArticles[f.id]}</button>`:`<span class="muted">0</span>`}</td>
-    <td><input data-f="note" value="${esc(f.note)}" placeholder="note"></td></tr>`).join("");
+    <td><textarea data-auto data-f="nom" rows="1">${esc(f.nom)}</textarea></td>
+    <td><select data-f="type">${[["marchandise","Marchandise"],["frais","Frais généraux"],["à classer","À classer"]].map(([v,l])=>`<option value="${v}" ${(f.type===v||(v==="à classer"&&!["marchandise","frais"].includes(f.type)))?"selected":""}>${l}</option>`).join("")}</select></td>
+    <td><select data-f="canal">${[["","—"],["email","Email"],["sms","SMS"],["whatsapp","WhatsApp"],["telephone","Téléphone"]].map(([v,l])=>`<option value="${v}" ${f.canal===v?"selected":""}>${l}</option>`).join("")}</select></td>
+    <td><div class="stack"><textarea data-auto data-f="email" rows="1" placeholder="email">${esc(f.email)}</textarea><input data-f="telephone" value="${esc(f.telephone)}" placeholder="téléphone"></div></td>
+    <td><div class="stack"><textarea data-auto data-f="jourCommande" rows="1" placeholder="jour de commande">${esc(f.jourCommande)}</textarea><input data-f="delai" value="${esc(f.delai)}" placeholder="délai, ex. 2 jours"></div></td>
+    <td class="small" style="overflow-wrap:anywhere">${rythme(f)}</td>
+    <td style="text-align:center">${r.nbArticles[f.id]?`<button class="btn small ghost" data-arts="${esc(f.id)}" title="Voir ses articles">${r.nbArticles[f.id]}</button>`:`<span class="muted">0</span>`}</td>
+    <td><textarea data-auto data-f="note" rows="1" placeholder="note">${esc(f.note)}</textarea></td></tr>`).join("");
   $("#main").innerHTML=`<div class="top"><h1 class="grow">Fournisseurs</h1><span class="saved" id="saved"></span></div>
   <div class="tools"><input id="q" placeholder="🔍 Chercher…" value="${esc(F.q)}" style="width:220px">
     <div class="chips">${[["marchandise","Marchandise"],["frais","Frais généraux"],["a_classer","À classer"],["tous","Tous"]].map(([k,l])=>`<button class="chip" data-type="${k}" aria-pressed="${F.type===k}">${l}</button>`).join("")}</div>
     <span class="muted small">${vis.length} fournisseur${vis.length>1?"s":""}</span></div>
-  <div class="scrollx"><table class="t" style="min-width:1250px"><thead><tr><th>Nom</th><th>Type</th><th>Commande par</th><th>Email</th><th>Téléphone</th><th>Jour de commande</th><th>Délai de livraison</th><th>Rythme (factures)</th><th>Articles</th><th>Note</th></tr></thead><tbody id="tb">${rows||`<tr><td colspan="10" class="muted" style="padding:20px">Aucun fournisseur</td></tr>`}</tbody></table></div>
+  <div class="scrollx"><table class="t" style="min-width:1080px"><colgroup><col style="width:12%"><col style="width:142px"><col style="width:116px"><col style="width:15%"><col style="width:14%"><col style="width:146px"><col style="width:72px"><col></colgroup><thead><tr><th>Nom</th><th>Type</th><th>Commande par</th><th>Email · téléphone</th><th>Jour de commande · délai de livraison</th><th>Rythme (factures)</th><th>Articles</th><th>Note</th></tr></thead><tbody id="tb">${rows||`<tr><td colspan="8" class="muted" style="padding:20px">Aucun fournisseur</td></tr>`}</tbody></table></div>
   <p class="muted small">Seuls les fournisseurs « Marchandise » déclenchent l'alerte « pas commandé depuis longtemps ». Le rythme vient des factures (CLV - FACTURES) et des commandes envoyées. Le délai de livraison sert au contrôle des livraisons du matin.</p>`;
+  autoH($("#main"));
   let qt;$("#q").oninput=e=>{clearTimeout(qt);qt=setTimeout(()=>{F.q=e.target.value;pFournisseurs().then(()=>{const i=$("#q");i.focus();i.setSelectionRange(i.value.length,i.value.length)})},300)};
   $("#main").querySelectorAll("[data-type]").forEach(b=>b.onclick=()=>{F.type=b.dataset.type;pFournisseurs()});
   $("#main").querySelectorAll("[data-arts]").forEach(b=>b.onclick=()=>{Object.assign(A,{fourn:b.dataset.arts,zone:"",q:"",seuil:"",etat:"actifs"});view="articles";shell()});
@@ -567,17 +576,18 @@ async function pEquipe(){
   const ROLES=[["employe","Employé"],["admin","Admin (gérant)"],["test","Compte test"]];
   const rows=list.map(e=>`<tr data-id="${esc(e.id)}" class="${e.actif==="non"?"off":""}">
     <td><input data-f="prenom" value="${esc(e.prenom)}"></td><td><input data-f="nom" value="${esc(e.nom)}"></td>
-    <td style="width:210px"><input data-f="email" value="${esc(e.email)}" placeholder="email"></td>
-    <td style="width:170px"><select data-f="posteId"><option value="">—</option>${S.postes.map(p=>`<option value="${esc(p.id)}" ${p.id===e.posteId?"selected":""}>${esc(p.nom)}</option>`).join("")}</select></td>
-    <td style="width:150px"><select data-f="role" ${e.id===S.me.id?"disabled title=\"Ton propre compte reste admin\"":""}>${ROLES.map(([v,l])=>`<option value="${v}" ${(e.role||"employe")===v?"selected":""}>${l}</option>`).join("")}</select></td>
-    <td style="width:100px"><input data-f="baseHebdo" value="${esc(e.baseHebdo)}" title="Heures par semaine au contrat (39 = temps plein)"></td>
-    <td style="width:110px"><select data-f="actif" ${e.id===S.me.id?"disabled":""}><option value="oui" ${e.actif!=="non"?"selected":""}>Oui</option><option value="non" ${e.actif==="non"?"selected":""}>Parti·e</option></select></td>
-    <td style="width:150px">${e.aUnCode?"":`<span class="pill warn">pas de code</span> `}<button class="btn small ghost" data-code="${esc(e.id)}">Nouveau code</button></td></tr>`).join("");
+    <td><textarea data-auto data-f="email" rows="1" placeholder="email" style="overflow-wrap:anywhere">${esc(e.email)}</textarea></td>
+    <td><select data-f="posteId"><option value="">—</option>${S.postes.map(p=>`<option value="${esc(p.id)}" ${p.id===e.posteId?"selected":""}>${esc(p.nom)}</option>`).join("")}</select></td>
+    <td><select data-f="role" ${e.id===S.me.id?"disabled title=\"Ton propre compte reste admin\"":""}>${ROLES.map(([v,l])=>`<option value="${v}" ${(e.role||"employe")===v?"selected":""}>${l}</option>`).join("")}</select></td>
+    <td><input data-f="baseHebdo" value="${esc(e.baseHebdo)}" title="Heures par semaine au contrat (39 = temps plein)"></td>
+    <td><select data-f="actif" ${e.id===S.me.id?"disabled":""}><option value="oui" ${e.actif!=="non"?"selected":""}>Oui</option><option value="non" ${e.actif==="non"?"selected":""}>Parti·e</option></select></td>
+    <td>${e.aUnCode?"":`<span class="pill warn">pas de code</span> `}<button class="btn small ghost" data-code="${esc(e.id)}">Nouveau code</button></td></tr>`).join("");
   $("#main").innerHTML=`<div class="top"><h1 class="grow">Équipe</h1><span class="saved" id="saved"></span><button class="btn" id="new">+ Nouvelle personne</button></div>
-  <div class="scrollx"><table class="t" style="min-width:1100px"><thead><tr><th>Prénom</th><th>Nom</th><th>Email</th><th>Poste</th><th>Rôle</th><th>H/semaine</th><th>Active</th><th>Code</th></tr></thead><tbody id="tb">${rows}</tbody></table></div>
+  <div class="scrollx"><table class="t" style="min-width:1060px"><colgroup><col style="width:12%"><col style="width:12%"><col><col style="width:178px"><col style="width:140px"><col style="width:78px"><col style="width:96px"><col style="width:150px"></colgroup><thead><tr><th>Prénom</th><th>Nom</th><th>Email</th><th>Poste</th><th>Rôle</th><th>H/semaine</th><th>Active</th><th>Code</th></tr></thead><tbody id="tb">${rows}</tbody></table></div>
   <p class="muted small">H/semaine : 39 = temps plein ; en dessous, les heures jusqu'à 39 h comptent en heures complémentaires dans le rapport Proxima. Un compte test n'apparaît dans aucun rapport. Une personne « partie » ne peut plus se connecter.</p>`;
   $("#tb").addEventListener("change",async e=>{const tr=e.target.closest("tr[data-id]"),f=e.target.dataset.f;if(!tr||!f)return;
     try{await call("employeSave",{id:tr.dataset.id,[f]:e.target.value.trim()});const s=$("#saved");if(s){s.textContent="✓ Enregistré";setTimeout(()=>{if($("#saved"))$("#saved").textContent=""},1500)}S=await call("boot");if(f==="actif")pEquipe()}catch(err){toast(err.message,true);pEquipe()}});
+  autoH($("#main"));
   const montrer=(prenom,pin)=>dialog(`<h3>Code de ${esc(prenom)}</h3><p style="font-size:2.4rem;font-family:var(--display);letter-spacing:.3em;text-align:center;margin:10px 0">${esc(pin)}</p><p class="muted small">Donne-le à ${esc(prenom)}. Il ne sera plus affiché ensuite. ${esc(prenom)} pourra le changer dans l'appli (Accueil › Changer mon code).</p><div class="acts"><button class="btn" data-x>J'ai noté</button></div>`,(d,close)=>{d.querySelector("[data-x]").onclick=close});
   $("#main").querySelectorAll("[data-code]").forEach(b=>b.onclick=()=>{const e=list.find(x=>x.id===b.dataset.code);
     confirmer("Faire un nouveau code pour "+e.prenom+" ?","L'ancien code ne marchera plus et "+e.prenom+" devra se reconnecter.","Nouveau code",async()=>{const r=await act(()=>call("employeSave",{id:e.id,nouveauCode:true}));montrer(e.prenom,r.pin);pEquipe()})});
