@@ -228,7 +228,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-14o";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-14p";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -457,7 +457,7 @@ async function vPlanning(){
     let sh=w.shifts.filter(s=>s.date===d&&(mode==="equipe"||s.empId===me)).sort((a,b)=>a.debut<b.debut?-1:a.debut>b.debut?1:empName(a.empId)<empName(b.empId)?-1:1);
     const rp=w.repos.filter(r=>r.date===d&&(mode==="equipe"||r.empId===me));
     const tot=sh.reduce((a,s)=>a+hm2m(s.fin)-hm2m(s.debut)-(+s.pause||0),0);
-    const cards=rp.map(r=>`<div class="repos"><div class="h">${esc(r.type)}</div><div class="p">Demande #${esc(r.num)}</div><div>${esc(empName(r.empId))}</div></div>`).join("")+
+    const cards=rp.map(r=>admin?`<button class="repos" data-rep="${esc(r.num)}"><div class="h">${esc(r.type)} ✎</div><div class="p">Demande #${esc(r.num)}</div><div>${esc(empName(r.empId))}</div></button>`:`<div class="repos"><div class="h">${esc(r.type)}</div><div class="p">Demande #${esc(r.num)}</div><div>${esc(empName(r.empId))}</div></div>`).join("")+
       sh.map(s=>{
         const p=admin&&w.pointages.find(x=>x.empId===s.empId&&x.date===d);
         let pt="";
@@ -481,6 +481,7 @@ async function vPlanning(){
   if(admin){
     $("#app").querySelectorAll("[data-sid]").forEach(b=>b.onclick=()=>shiftSheet(w.shifts.find(s=>s.id===b.dataset.sid),w));
     $("#app").querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>shiftSheet({date:b.dataset.add},w));
+    $("#app").querySelectorAll("[data-rep]").forEach(b=>b.onclick=async()=>{let L;try{L=await call("demandes")}catch(e){toast(e.message,true);return}absenceModifSheet(L.find(x=>String(x.num)===b.dataset.rep),()=>go("planning"))});
     $("#stype").onclick=semaineTypeSheet;
     $("#reapp").onclick=()=>confirmSheet("Refaire cette semaine ?","Tous les postes de la semaine sont effacés et recréés depuis la semaine type (les repos acceptés sont respectés).","Refaire",async()=>{await act(()=>call("semaineReappliquer",{date:l}),"Semaine refaite");go("planning")});
   }
@@ -665,7 +666,7 @@ async function vRepos(){
     <div>${d.du===d.au?"Le "+jourLong(d.du):"Du "+jourLong(d.du)+" au "+jourLong(d.au)} <span class="muted">(${plural(n,"jour")})</span></div>
     ${d.motif?`<div class="small muted">« ${esc(d.motif)} »</div>`:""}${d.reponse?`<div class="small">Réponse : ${esc(d.reponse)}</div>`:""}
     ${d.statut==="attente"?(admin?`<div class="actions"><button class="btn ghost" data-no="${esc(d.id)}">Refuser</button><button class="btn" data-yes="${esc(d.id)}">Accepter</button></div>`:`<button class="btn small ghost" data-cancel="${esc(d.id)}" style="align-self:flex-start">Annuler ma demande</button>`):""}
-    ${admin&&d.statut==="acceptee"?`<button class="btn small ghost" data-cancel="${esc(d.id)}" style="align-self:flex-start">Annuler ce repos</button>`:""}</div>`};
+    ${admin&&d.statut==="acceptee"?`<div class="row" style="gap:8px"><button class="btn small ghost" data-modif="${esc(d.id)}">Modifier</button><button class="btn small ghost" data-cancel="${esc(d.id)}">Annuler ce repos</button></div>`:""}</div>`};
   const att=list.filter(d=>d.statut==="attente"), rest=list.filter(d=>d.statut!=="attente").slice(0,30);
   $("#app").innerHTML=`${header(admin?"Demandes de repos":"Mes repos")}
   <button class="btn sun" id="newd">+ ${admin?"Ajouter un repos":"Demander un repos"}</button>
@@ -676,7 +677,8 @@ async function vRepos(){
   const app=$("#app");
   app.querySelectorAll("[data-yes]").forEach(b=>b.onclick=()=>repondre(b.dataset.yes,"acceptee"));
   app.querySelectorAll("[data-no]").forEach(b=>b.onclick=()=>repondre(b.dataset.no,"refusee"));
-  app.querySelectorAll("[data-cancel]").forEach(b=>b.onclick=()=>confirmSheet("Annuler ?",admin?"Attention : les postes déjà retirés du planning ne reviennent pas tout seuls.":"Ta demande sera annulée.","Annuler la demande",async()=>{await act(()=>call("demandeAnnuler",{id:b.dataset.cancel}),"Annulée");go("repos")}));
+  app.querySelectorAll("[data-modif]").forEach(b=>b.onclick=()=>absenceModifSheet(list.find(x=>x.id===b.dataset.modif),()=>go("repos")));
+  app.querySelectorAll("[data-cancel]").forEach(b=>b.onclick=()=>confirmSheet("Annuler ?",admin?"Ses postes de la semaine type reviennent sur ces jours.":"Ta demande sera annulée.","Annuler la demande",async()=>{await act(()=>call("demandeAnnuler",{id:b.dataset.cancel}),"Annulée");go("repos")}));
   function repondre(id,statut){
     const d=list.find(x=>x.id===id);
     open(`<h3>${statut==="acceptee"?"Accepter":"Refuser"} la demande #${esc(d.num)}</h3><p class="hint">${esc(empName(d.empId))} · ${esc(d.type)} du ${ddmm(d.du)} au ${ddmm(d.au)}${statut==="acceptee"?" — ses postes de ces jours seront retirés du planning.":""}</p>
@@ -1047,6 +1049,20 @@ async function notifCard(){
     try{const sb=await pushSub();if(sb){try{await call("desabonner",{endpoint:sb.endpoint})}catch(e){}await sb.unsubscribe()}toast("Notifications désactivées")}catch(e){toast(e.message,true)}notifCard()});
 }
 
+// ---------- modifier une absence acceptée (motif, dates, précision) : David
+function absenceModifSheet(x,apres){
+  if(!x)return;
+  const remis=r=>r&&r.remis?` · ${r.remis} poste${r.remis>1?"s":""} remis`:"";
+  open(`<h3>${esc(empName(x.empId))} · ${esc(x.type)} <span class="hint">#${esc(x.num)}</span></h3>
+  <label class="f">Motif<select id="m-t">${["Maladie","Absence","Repos","Congé payé","Autre"].map(t=>`<option ${t===x.type?"selected":""}>${t}</option>`).join("")}</select></label>
+  <div class="grid2"><label class="f">Du<input id="m-du" type="date" value="${x.du}"></label><label class="f">Au (inclus)<input id="m-au" type="date" value="${x.au}"></label></div>
+  <label class="f">Précision (facultatif)<input id="m-m" maxlength="300" value="${esc(x.motif||"")}"></label>
+  <p class="hint">Si tu raccourcis ou annules, les postes de la semaine type reviennent sur les jours libérés.</p>
+  <div class="actions"><button class="btn bad" id="m-del">Annuler l'absence</button><button class="btn" id="m-ok">Enregistrer</button></div>`,()=>{
+    $("#m-ok").onclick=async()=>{$("#m-ok").disabled=true;try{const r=await call("demandeModifier",{id:x.id,type:$("#m-t").value,du:$("#m-du").value,au:$("#m-au").value,motif:$("#m-m").value});toast("Absence modifiée"+remis(r));close();cache.weeks={};apres()}catch(e){toast(e.message,true);$("#m-ok").disabled=false}};
+    $("#m-del").onclick=async()=>{$("#m-del").disabled=true;try{const r=await call("demandeAnnuler",{id:x.id});toast("Absence annulée"+remis(r));close();cache.weeks={};apres()}catch(e){toast(e.message,true);$("#m-del").disabled=false}};
+  });
+}
 // ---------- poste -> absence (maladie, repos, absence…) : crée une demande déjà acceptée, le poste est retiré du planning
 function absenceSheet(s){
   open(`<h3>${esc(empName(s.empId))} ne travaille pas</h3><p class="hint cap">${jourLong(s.date)} · poste ${s.debut}–${s.fin}</p>

@@ -347,7 +347,7 @@ async function pPlanning(){
     jours.forEach((d,i)=>{
       const sh=shifts.filter(s=>s.empId===e.id&&s.date===d).sort((a,b)=>a.debut<b.debut?-1:1);
       const rp=repos.filter(r=>r.empId===e.id&&r.date===d);
-      cells+=`<div class="cell ${i>=5?"weekend":""}" data-e="${esc(e.id)}" data-d="${d}">${rp.map(r=>`<div class="repos" data-rep="${esc(r.num)}" title="Cliquer pour annuler">${esc(r.type)} #${esc(r.num)}</div>`).join("")}${sh.map(chip).join("")}</div>`;
+      cells+=`<div class="cell ${i>=5?"weekend":""}" data-e="${esc(e.id)}" data-d="${d}">${rp.map(r=>`<div class="repos" data-rep="${esc(r.num)}" title="Cliquer pour modifier ou annuler">${esc(r.type)} #${esc(r.num)}</div>`).join("")}${sh.map(chip).join("")}</div>`;
     });
   });
   $("#main").innerHTML=`<div class="top"><h1 class="grow">Planning</h1>
@@ -393,7 +393,7 @@ function absenceDlg(s){
   <div class="g2"><label class="f">Motif<select id="a-t"><option>Maladie</option><option>Absence</option><option>Repos</option><option>Congé payé</option><option>Autre</option></select></label>
   <label class="f">Jusqu'au (inclus)<input id="a-au" type="date" value="${s.date}" min="${s.date}"></label></div>
   <label class="f">Précision (facultatif)<input id="a-m" maxlength="300" placeholder="Ex. : arrêt maladie, prévenu par téléphone"></label>
-  <p class="muted small">Les postes de ces jours sont retirés du planning ; les jours apparaissent dans le rapport Proxima (repos / absences). Pour annuler, clique sur la case hachurée.</p>
+  <p class="muted small">Les postes de ces jours sont retirés du planning ; les jours apparaissent dans le rapport Proxima (repos / absences). Pour modifier ou annuler, clique sur la case hachurée.</p>
   <div class="acts"><button class="btn ghost" data-x>Annuler</button><button class="btn" data-y>Valider</button></div>`,(d,close)=>{
     d.querySelector("[data-x]").onclick=close;
     d.querySelector("[data-y]").onclick=async()=>{try{await call("demandeCreer",{type:d.querySelector("#a-t").value,du:s.date,au:d.querySelector("#a-au").value||s.date,motif:d.querySelector("#a-m").value,empId:s.empId,accepter:true});toast("Enregistré");close();pPlanning()}catch(e){toast(e.message,true)}};
@@ -402,7 +402,17 @@ function absenceDlg(s){
 async function annulerAbsence(num){
   const list=await call("demandes");const x=list.find(y=>String(y.num)===String(num));if(!x)return;
   const emp=S.employes.find(e=>e.id===x.empId)||{prenom:"?"};
-  confirmer(`Annuler : ${x.type} de ${emp.prenom} ?`,`Du ${x.du.slice(8,10)}/${x.du.slice(5,7)} au ${x.au.slice(8,10)}/${x.au.slice(5,7)}. Les postes retirés ne reviennent pas tout seuls : rajoute-les ensuite (clic sur la case vide), ou « Refaire cette semaine depuis la semaine type ».`,"Annuler l'absence",async()=>{await act(()=>call("demandeAnnuler",{id:x.id}),"Absence annulée");pPlanning()});
+  const remis=r=>r&&r.remis?` · ${r.remis} poste${r.remis>1?"s":""} remis depuis la semaine type`:"";
+  dialog(`<h3>${esc(x.type)} de ${esc(emp.prenom)} <span class="muted small">#${esc(x.num)}</span></h3>
+  <div class="g3"><label class="f">Motif<select id="m-t">${["Maladie","Absence","Repos","Congé payé","Autre"].map(t=>`<option ${t===x.type?"selected":""}>${t}</option>`).join("")}</select></label>
+  <label class="f">Du<input id="m-du" type="date" value="${x.du}"></label><label class="f">Au (inclus)<input id="m-au" type="date" value="${x.au}"></label></div>
+  <label class="f">Précision (facultatif)<input id="m-m" maxlength="300" value="${esc(x.motif||"")}"></label>
+  <p class="muted small">Si tu raccourcis ou annules l'absence, les postes de la semaine type reviennent sur les jours libérés.</p>
+  <div class="acts"><button class="btn bad" id="m-del" style="margin-right:auto">Annuler l'absence</button><button class="btn ghost" data-x>Fermer</button><button class="btn" data-y>Enregistrer</button></div>`,(d,close)=>{
+    d.querySelector("[data-x]").onclick=close;
+    d.querySelector("#m-del").onclick=()=>{close();confirmer(`Annuler : ${x.type} de ${emp.prenom} ?`,`Du ${x.du.slice(8,10)}/${x.du.slice(5,7)} au ${x.au.slice(8,10)}/${x.au.slice(5,7)}. Ses postes de la semaine type reviennent sur ces jours.`,"Annuler l'absence",async()=>{const r=await act(()=>call("demandeAnnuler",{id:x.id}));toast("Absence annulée"+remis(r));pPlanning()})};
+    d.querySelector("[data-y]").onclick=async()=>{try{const r=await call("demandeModifier",{id:x.id,type:d.querySelector("#m-t").value,du:d.querySelector("#m-du").value,au:d.querySelector("#m-au").value,motif:d.querySelector("#m-m").value});toast("Absence modifiée"+remis(r));close();pPlanning()}catch(e){toast(e.message,true)}};
+  });
 }
 function shiftDlg(s,pointages,save){
   const nouveau=!s.id,p=!P.type&&pointages.find(x=>x.empId===s.empId&&x.date===s.date);
