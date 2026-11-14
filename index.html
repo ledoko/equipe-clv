@@ -165,6 +165,14 @@ h2{font-family:var(--display);font-weight:600;font-size:1.1rem;margin:0}
 .inv .t .a{font-weight:600;font-size:.95rem}
 .inv .t .b{font-size:.78rem;color:var(--muted)}
 .inv.low .t .a{color:var(--bad)}
+.inv.vu{background:color-mix(in srgb,var(--ok) 8%,transparent)}
+.inv .okc{color:var(--ok)}
+.invdays{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.invday{display:flex;flex-direction:column;gap:8px;text-align:left;border:1.5px solid var(--line);font:inherit;color:inherit}
+.invday.cur{border-color:var(--lagoon)}
+.invday:disabled{opacity:.5}
+.invday .pct{font-family:var(--display);font-weight:800;font-size:1.3rem}
+.invday .pct.ok{color:var(--ok)}
 .step{display:flex;align-items:center;border:1.5px solid var(--line);border-radius:12px;overflow:hidden;flex:none;background:var(--bg)}
 .step button{border:0;background:none;width:38px;height:42px;font-size:1.3rem;font-weight:700;color:var(--lagoon)}
 .step input{width:52px;border:0;border-radius:0;padding:8px 2px;text-align:center;background:var(--surface);font-weight:700}
@@ -220,7 +228,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-14n";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-14o";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -235,6 +243,7 @@ const pad=n=>(n<10?"0":"")+n;
 const d2n=s=>{const p=String(s).split("-");return Date.UTC(+p[0],+p[1]-1,+p[2])/864e5};
 const n2d=n=>{const d=new Date(n*864e5);return d.getUTCFullYear()+"-"+pad(d.getUTCMonth()+1)+"-"+pad(d.getUTCDate())};
 const addDays=(s,k)=>n2d(d2n(s)+k);
+const diffD=(a,b)=>Math.round(d2n(b)-d2n(a));
 const wday=s=>((new Date(d2n(s)*864e5).getUTCDay()+6)%7)+1;
 const lundiDe=s=>addDays(s,1-wday(s));
 const hm2m=t=>{if(!t)return 0;const p=String(t).split(":");return +p[0]*60+(+p[1]||0)};
@@ -571,31 +580,66 @@ async function vTaches(){
 }
 
 // ---------- inventaire ----------
+// Accueil : vendredi, samedi, dimanche, lundi de la semaine, avec le % compté. Puis la liste du jour, par zone ou par fournisseur.
+const JLONG=["","lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"];
+const invKey=j=>INV_KEY+"-"+j;
+const invDraft=j=>{try{return JSON.parse(localStorage.getItem(invKey(j))||"{}")}catch(e){return{}}};
+const invDuJour=(r,j)=>r.articles.filter(a=>(a.jours||"").split(",").includes(String(wday(j))));
+function invPct(r,j){const L=invDuJour(r,j),c=r.comptes[j]||{},dr=invDraft(j);const n=L.filter(a=>c[a.id]!=null||(dr[a.id]!=null&&dr[a.id]!=="")).length;return{n,tot:L.length,pct:L.length?Math.round(n*100/L.length):0}}
 async function vInventaire(){
-  const r=await call("inventaire");
-  const zones=[...new Set(r.articles.map(a=>a.zone||"Autre"))];
-  let draft={};try{draft=JSON.parse(localStorage.getItem(INV_KEY)||"{}")}catch(e){}
-  const wd=String(wday(today())), JN=["","lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"];
-  const duJour=r.articles.some(a=>(a.jours||"").split(",").includes(wd));
-  const zone=sub&&sub.zone||(duJour?"jour":"tout"), q=(sub&&sub.q||"").toLowerCase();
-  const save=()=>{try{localStorage.setItem(INV_KEY,JSON.stringify(draft));const db=+localStorage.getItem(INV_KEY+"-debut")||0;if(!db||Date.now()-db>12*3600e3)localStorage.setItem(INV_KEY+"-debut",String(Date.now()))}catch(e){}};
-  const debutMs=()=>{try{return +localStorage.getItem(INV_KEY+"-debut")||0}catch(e){return 0}};
-  const vis=r.articles.filter(a=>(zone==="tout"||(zone==="jour"?(a.jours||"").split(",").includes(wd):(a.zone||"Autre")===zone))&&(!q||a.nom.toLowerCase().includes(q)||a.fournisseur.toLowerCase().includes(q)));
-  const counted=()=>Object.keys(draft).filter(k=>draft[k]!==""&&draft[k]!=null).length;
-  $("#app").innerHTML=`${header("Inventaire","Compte ce qu'il reste. Laisse vide ce que tu ne comptes pas.")}
-  <div class="chips">${duJour?`<button class="chip" data-z="jour" aria-pressed="${zone==="jour"}">Inventaire du ${JN[wd]}</button>`:""}<button class="chip" data-z="tout" aria-pressed="${zone==="tout"}">Tout (${r.articles.length})</button>${zones.map(z=>`<button class="chip" data-z="${esc(z)}" aria-pressed="${zone===z}">${esc(z)}</button>`).join("")}</div>
-  <input id="iq" type="search" placeholder="Chercher un article…" value="${esc(q)}">
-  <div class="list" id="il">${vis.map(a=>{
-    const v=draft[a.id]==null?"":draft[a.id], low=v!==""&&a.min!==""&&+v<=+a.min;
-    return `<div class="inv ${low?"low":""}" data-a="${esc(a.id)}"><div class="t"><div class="a">${esc(a.nom)}</div><div class="b">${esc(a.zone)} · ${esc(a.fournisseur||"—")} · ${esc(a.unite)}${a.cible!==""?` · avoir ${esc(a.cible)}`:""}${a.dernier?` · dernier : ${a.dernier.qte} le ${ddmm(a.dernier.date)}`:""}</div></div>
-    <div class="step"><button data-d="-1" aria-label="Moins">−</button><input inputmode="decimal" value="${esc(v)}" aria-label="Quantité ${esc(a.nom)}"><button data-d="1" aria-label="Plus">+</button></div></div>`}).join("")||`<div class="empty">Aucun article</div>`}</div>
-  <div style="height:60px"></div>
-  <div class="bar"><button class="btn" id="ival">Valider l'inventaire (${counted()})</button></div>`;
+  const r=await call("inventaire",sub&&sub.vendredi?{vendredi:sub.vendredi}:{});
+  try{const old=localStorage.getItem(INV_KEY);if(old&&old!=="{}"&&!localStorage.getItem(invKey(today()))){localStorage.setItem(invKey(today()),old);localStorage.setItem(invKey(today())+"-debut",localStorage.getItem(INV_KEY+"-debut")||"")}localStorage.removeItem(INV_KEY);localStorage.removeItem(INV_KEY+"-debut")}catch(e){}
+  if(sub&&sub.jour)return invListe(r,sub.jour);
+  const ven=r.vendredi,lun=r.jours[3],t=r.today;
+  const btn=j=>{const p=invPct(r,j),fut=j>t,old=diffD(j,t)>3,cur=j===t;
+    return `<button class="card invday ${cur?"cur":""}" data-j="${j}" ${p.tot?"":"disabled"}><div class="row"><b class="grow cap">${JLONG[wday(j)]} ${ddmm(j)}</b><span class="pct ${p.pct>=100?"ok":""}">${p.tot?p.pct+" %":"—"}</span></div>
+    <div class="prog"><i style="width:${p.pct}%"></i></div><div class="small muted">${p.tot?`${p.n} / ${plural(p.tot,"article")}`:"Aucun article ce jour-là"}${cur?" · aujourd'hui":fut?" · à venir":old?" · terminé":""}</div></button>`};
+  $("#app").innerHTML=`${header("Inventaire","Choisis le jour. Le % montre ce qui est déjà compté cette semaine.")}
+  <div class="row" style="justify-content:space-between;margin-bottom:10px"><button class="icon" id="iprev" aria-label="Semaine d'avant">‹</button><b>Semaine du ${ddmm(ven)} au ${ddmm(lun)}</b><button class="icon" id="inext" aria-label="Semaine d'après" ${lun>=t?"disabled":""}>›</button></div>
+  <div class="invdays">${r.jours.map(btn).join("")}</div>
+  <button class="btn ghost full" id="itout" style="margin-top:14px">Tout l'inventaire (${r.articles.length} articles), pour aujourd'hui</button>`;
   bindOut();
-  const setSub=o=>{sub=Object.assign({zone,q},o);go("inventaire")};
-  $("#app").querySelectorAll("[data-z]").forEach(b=>b.onclick=()=>setSub({zone:b.dataset.z}));
-  let qt;$("#iq").oninput=e=>{clearTimeout(qt);qt=setTimeout(()=>{sub=Object.assign({zone,q:e.target.value},{});go("inventaire");setTimeout(()=>{const i=$("#iq");if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}},50)},450)};
-  const upd=()=>{$("#ival").textContent=`Valider l'inventaire (${counted()})`};
+  $("#app").querySelectorAll("[data-j]").forEach(b=>b.onclick=()=>{sub={vendredi:ven,jour:b.dataset.j};go("inventaire")});
+  $("#itout").onclick=()=>{sub={vendredi:ven,jour:"tout"};go("inventaire")};
+  $("#iprev").onclick=()=>{sub={vendredi:addDays(ven,-7)};go("inventaire")};
+  $("#inext").onclick=()=>{if(lun<t){sub={vendredi:addDays(ven,7)};go("inventaire")}};
+}
+function invListe(r,jour){
+  const tout=jour==="tout", j=tout?r.today:jour, t=r.today;
+  const peut=j<=t&&diffD(j,t)<=3;
+  const base=tout?r.articles:invDuJour(r,j), deja=(tout?{}:r.comptes[j])||{};
+  const grp=sub.grp||"zone", q=(sub.q||"").toLowerCase();
+  const K=invKey(j);
+  let draft=invDraft(j);
+  const save=()=>{try{localStorage.setItem(K,JSON.stringify(draft));const db=+localStorage.getItem(K+"-debut")||0;if(!db||Date.now()-db>12*3600e3)localStorage.setItem(K+"-debut",String(Date.now()))}catch(e){}};
+  const debutMs=()=>{try{return +localStorage.getItem(K+"-debut")||0}catch(e){return 0}};
+  const vis=base.filter(a=>!q||a.nom.toLowerCase().includes(q)||a.fournisseur.toLowerCase().includes(q)||(a.zone||"").toLowerCase().includes(q));
+  const counted=()=>Object.keys(draft).filter(k=>draft[k]!==""&&draft[k]!=null).length;
+  const fait=()=>base.filter(a=>deja[a.id]!=null||(draft[a.id]!=null&&draft[a.id]!=="")).length;
+  // sections : par zone ou par fournisseur ; les articles sans fournisseur toujours à part, à la fin
+  const avec=vis.filter(a=>a.fournisseur), sans=vis.filter(a=>!a.fournisseur);
+  const cle=a=>grp==="fournisseur"?a.fournisseur:(a.zone||"Autre");
+  const secs=[...new Set(avec.map(cle))].sort((x,y)=>x.localeCompare(y,"fr")).map(k=>[k,avec.filter(a=>cle(a)===k)]);
+  if(sans.length)secs.push(["Sans fournisseur",sans,true]);
+  const row=a=>{const v=draft[a.id]==null?"":draft[a.id],low=v!==""&&a.min!==""&&+v<=+a.min,ok=deja[a.id]!=null;
+    const info=[grp==="fournisseur"?a.zone:a.fournisseur,a.cartonnage?"📦 "+a.cartonnage:"",a.unite&&a.unite!==a.cartonnage?a.unite:"",a.cible!==""?"avoir "+a.cible:"",ok?`<b class="okc">✓ compté : ${deja[a.id]}</b>`:a.dernier?`dernier : ${a.dernier.qte} le ${ddmm(a.dernier.date)}`:""].filter(Boolean);
+    return `<div class="inv ${low?"low":""} ${ok&&v===""?"vu":""}" data-a="${esc(a.id)}"><div class="t"><div class="a">${esc(a.nom)}</div><div class="b">${info.map(x=>x.startsWith("<b")?x:esc(x)).join(" · ")}</div></div>
+    ${peut?`<div class="step"><button data-d="-1" aria-label="Moins">−</button><input inputmode="decimal" value="${esc(v)}" placeholder="${ok?esc(deja[a.id]):""}" aria-label="Quantité ${esc(a.nom)}"><button data-d="1" aria-label="Plus">+</button></div>`:""}</div>`};
+  const p0=fait();
+  $("#app").innerHTML=`${header(`<button class="icon" id="iback" aria-label="Retour" style="display:inline-grid;vertical-align:middle;margin-left:-8px">‹</button>${tout?"Tout l'inventaire":"Inventaire du "+JLONG[wday(j)]+" "+ddmm(j)}`,peut?"Compte ce qu'il reste. Laisse vide ce que tu ne comptes pas.":j>t?"Ce jour n'est pas encore arrivé : la liste est là pour voir.":"Ce jour est passé : la liste est là pour voir.")}
+  ${tout?"":`<div class="row small" style="margin-bottom:6px"><span class="grow"><b id="ipn">${p0}</b> / ${base.length} comptés</span><b id="ipp">${base.length?Math.round(p0*100/base.length):0} %</b></div><div class="prog" style="margin-bottom:12px"><i id="ipb" style="width:${base.length?Math.round(p0*100/base.length):0}%"></i></div>`}
+  <div class="chips"><button class="chip" data-g="zone" aria-pressed="${grp==="zone"}">Par zone</button><button class="chip" data-g="fournisseur" aria-pressed="${grp==="fournisseur"}">Par fournisseur</button></div>
+  <input id="iq" type="search" placeholder="Chercher un article, une zone, un fournisseur…" value="${esc(sub.q||"")}">
+  <div id="il">${secs.map(([k,L,apart])=>`<section class="sec"><h2 ${apart?'style="color:var(--bad)"':""}>${esc(k)} <span class="muted small">${L.filter(a=>deja[a.id]!=null).length}/${L.length}</span></h2><div class="list">${L.map(row).join("")}</div></section>`).join("")||`<div class="empty">Aucun article</div>`}</div>
+  <div style="height:60px"></div>
+  ${peut?`<div class="bar"><button class="btn" id="ival">Valider l'inventaire (${counted()})</button></div>`:""}`;
+  bindOut();
+  $("#iback").onclick=()=>{sub={vendredi:r.vendredi};go("inventaire")};
+  const setSub=o=>{sub=Object.assign({},sub,o);go("inventaire")};
+  $("#app").querySelectorAll("[data-g]").forEach(b=>b.onclick=()=>setSub({grp:b.dataset.g}));
+  let qt;$("#iq").oninput=e=>{clearTimeout(qt);qt=setTimeout(()=>{setSub({q:e.target.value});setTimeout(()=>{const i=$("#iq");if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}},50)},450)};
+  if(!peut)return;
+  const upd=()=>{$("#ival").textContent=`Valider l'inventaire (${counted()})`;if(!tout&&base.length){const n=fait(),pc=Math.round(n*100/base.length);$("#ipn").textContent=n;$("#ipp").textContent=pc+" %";$("#ipb").style.width=pc+"%"}};
   const il=$("#il");
   il.addEventListener("click",e=>{const b=e.target.closest("[data-d]");if(!b)return;const row=b.closest("[data-a]"),inp=row.querySelector("input");const v=Math.max(0,(+String(inp.value).replace(",",".")||0)+(+b.dataset.d));inp.value=v;draft[row.dataset.a]=String(v);save();upd();mark(row)});
   il.addEventListener("input",e=>{const row=e.target.closest("[data-a]");if(!row)return;draft[row.dataset.a]=e.target.value.replace(",",".");save();upd();mark(row)});
@@ -603,10 +647,10 @@ async function vInventaire(){
   $("#ival").onclick=()=>{
     const lignes=Object.keys(draft).filter(k=>draft[k]!==""&&draft[k]!=null).map(k=>({articleId:k,qte:draft[k]}));
     if(!lignes.length){toast("Compte au moins un article",true);return}
-    confirmSheet("Valider l'inventaire ?",plural(lignes.length,"article")+" compté"+(lignes.length>1?"s":"")+".","Valider",async()=>{
-      const res=await act(()=>call("inventaireValider",{lignes,debutMs:debutMs()}));
-      draft={};try{localStorage.setItem(INV_KEY,"{}");localStorage.removeItem(INV_KEY+"-debut")}catch(e){}
-      open(`<h3>Inventaire enregistré ✓</h3>${res.aCommander.length?`<p class="hint">À commander (David est prévenu) :</p>${res.aCommander.map(f=>`<div class="card"><b>${esc(f.fournisseur)}</b>${f.lignes.map(l=>`<div class="row small"><span class="grow">${esc(l.nom)}</span><span class="muted">reste ${l.stock}</span><b>+${l.qte}</b></div>`).join("")}</div>`).join("")}`:`<p class="hint">Rien sous le minimum. Merci !</p>`}<button class="btn full" id="iok">OK</button>`,()=>{$("#iok").onclick=()=>{close();go("inventaire")}});
+    confirmSheet("Valider l'inventaire ?",plural(lignes.length,"article")+" compté"+(lignes.length>1?"s":"")+(tout||j===t?".":" pour "+JLONG[wday(j)]+" "+ddmm(j)+"."),"Valider",async()=>{
+      const res=await act(()=>call("inventaireValider",{lignes,debutMs:debutMs(),pour:j}));
+      draft={};try{localStorage.removeItem(K);localStorage.removeItem(K+"-debut")}catch(e){}
+      open(`<h3>Inventaire enregistré ✓</h3>${res.aCommander.length?`<p class="hint">À commander (David est prévenu) :</p>${res.aCommander.map(f=>`<div class="card"><b>${esc(f.fournisseur)}</b>${f.lignes.map(l=>`<div class="row small"><span class="grow">${esc(l.nom)}</span><span class="muted">reste ${l.stock}</span><b>+${l.qte}</b></div>`).join("")}</div>`).join("")}`:`<p class="hint">Rien sous le minimum. Merci !</p>`}<button class="btn full" id="iok">OK</button>`,()=>{$("#iok").onclick=()=>{close();sub={vendredi:r.vendredi};go("inventaire")}});
     });
   };
 }
@@ -817,13 +861,14 @@ async function gArticles(){
     <label class="f">Nom<input id="a-n" value="${esc(a.nom||"")}"></label>
     <label class="f">Fournisseur<select id="a-f"><option value="">—</option>${r.fournisseurs.filter(f=>f.type!=="frais").sort((x,y)=>x.nom<y.nom?-1:1).map(f=>`<option value="${esc(f.id)}" ${f.id===a.fournisseurId?"selected":""}>${esc(f.nom)}</option>`).join("")}</select></label>
     <div class="grid2"><label class="f">Zone<input id="a-z" list="zl" value="${esc(a.zone||"")}"><datalist id="zl">${zones.map(z=>`<option value="${esc(z)}">`).join("")}</datalist></label><label class="f">Unité<input id="a-u" value="${esc(a.unite||"unité")}"></label></div>
+    <label class="f">Cartonnage<select id="a-k"><option value="">—</option>${["unité","kg","paquet","carton"].map(k=>`<option ${a.cartonnage===k?"selected":""}>${k}</option>`).join("")}</select></label>
     <div class="grid2"><label class="f">Mini (commander si ≤)<input id="a-min" inputmode="decimal" value="${esc(a.min||"")}"></label><label class="f">Cible (remplir jusqu'à)<input id="a-c" inputmode="decimal" value="${esc(a.cible||"")}"></label></div>
     ${a.note?`<p class="hint">${esc(a.note)}</p>`:""}
     <label class="row small"><input type="checkbox" id="a-act" style="width:auto" ${a.actif==="non"?"":"checked"}> Dans l'inventaire</label>
     <p class="err" id="a-err" hidden></p>
     <div class="actions"><button class="btn ghost" id="a-x">Annuler</button><button class="btn" id="a-ok">Enregistrer</button></div>`,()=>{
       $("#a-x").onclick=close;
-      $("#a-ok").onclick=async()=>{try{await call("articleSave",{id:a.id,nom:$("#a-n").value.trim(),fournisseurId:$("#a-f").value,zone:$("#a-z").value.trim(),unite:$("#a-u").value.trim(),min:$("#a-min").value.trim(),cible:$("#a-c").value.trim(),actif:$("#a-act").checked?"oui":"non",note:a.note&&/auto|calculés|remplir/.test(a.note)?"":a.note});toast("Enregistré");go("gerer",{page:"articles"})}catch(e){$("#a-err").hidden=false;$("#a-err").textContent=e.message}};
+      $("#a-ok").onclick=async()=>{try{await call("articleSave",{id:a.id,nom:$("#a-n").value.trim(),fournisseurId:$("#a-f").value,zone:$("#a-z").value.trim(),unite:$("#a-u").value.trim(),cartonnage:$("#a-k").value,min:$("#a-min").value.trim(),cible:$("#a-c").value.trim(),actif:$("#a-act").checked?"oui":"non",note:a.note&&/auto|calculés|remplir/.test(a.note)?"":a.note});toast("Enregistré");go("gerer",{page:"articles"})}catch(e){$("#a-err").hidden=false;$("#a-err").textContent=e.message}};
     });
   }
 }

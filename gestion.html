@@ -429,27 +429,29 @@ function shiftDlg(s,pointages,save){
 }
 
 // =====================================================================================  ARTICLES
-const A={q:"",zone:"",fourn:"",etat:"actifs",seuil:"",sel:new Set()};
+const A={q:"",zone:"",fourn:"",etat:"actifs",seuil:"",grp:"zone",sel:new Set()};
 const JC=["L","M","M","J","V","S","D"];
 function telecharger(nom,lignes){
   const csv="﻿"+lignes.map(r=>r.map(c=>{c=String(c==null?"":c);return /[;"\n]/.test(c)?'"'+c.replace(/"/g,'""')+'"':c}).join(";")).join("\r\n");
   const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));a.download=nom;document.body.appendChild(a);a.click();a.remove();
 }
+const CARTONS=["unité","kg","paquet","carton"];
 async function pArticles(){
   const r=await call("articlesAdmin");
   const arts=r.articles, fo={};r.fournisseurs.forEach(f=>fo[f.id]=f.nom);
   const byId={};arts.forEach(a=>byId[a.id]=a);
   const zones=[...new Set(arts.map(a=>a.zone).filter(Boolean))].sort(), unites=[...new Set(arts.map(a=>a.unite).filter(Boolean))].sort();
   const q=A.q.trim().toLowerCase();
-  const vis=arts.filter(a=>(A.etat==="toutes"||(A.etat==="actifs"?a.actif!=="non":a.actif==="non"))&&(!A.zone||a.zone===A.zone)&&(!A.fourn||a.fournisseurId===A.fourn)
+  const vis=arts.filter(a=>(A.etat==="toutes"||(A.etat==="actifs"?a.actif!=="non":a.actif==="non"))&&(!A.zone||a.zone===A.zone)&&(!A.fourn||(A.fourn==="__sans"?!fo[a.fournisseurId]:a.fournisseurId===A.fourn))
     &&(!A.seuil||(A.seuil==="sans"?a.min==="":a.min!==""))&&(!q||(a.nom+" "+a.ref+" "+a.note+" "+(fo[a.fournisseurId]||"")).toLowerCase().includes(q)))
-    .sort((x,y)=>(x.zone||"~").localeCompare(y.zone||"~","fr")||(+x.ordre||0)-(+y.ordre||0));
+    .sort((x,y)=>(A.grp==="fournisseur"?(fo[x.fournisseurId]?0:1)-(fo[y.fournisseurId]?0:1)||(fo[x.fournisseurId]||"").localeCompare(fo[y.fournisseurId]||"","fr"):0)||(x.zone||"~").localeCompare(y.zone||"~","fr")||(+x.ordre||0)-(+y.ordre||0));
+  const grpDe=a=>A.grp==="fournisseur"?(fo[a.fournisseurId]||"Sans fournisseur"):(a.zone||"Sans zone");
   const sansSeuil=arts.filter(a=>a.actif!=="non"&&a.min==="").length;
   const fSel=v=>`<option value="">— aucun —</option>${r.fournisseurs.slice().sort((a,b)=>a.nom.localeCompare(b.nom,"fr")).map(f=>`<option value="${esc(f.id)}" ${f.id===v?"selected":""}>${esc(f.nom)}</option>`).join("")}`;
   const MAX=400,montre=vis.slice(0,MAX);
   let rows="",cur=null;
   montre.forEach(a=>{
-    if(a.zone!==cur){cur=a.zone;rows+=`<tr class="grp"><td colspan="10">${esc(a.zone||"Sans zone")}</td></tr>`}
+    if(grpDe(a)!==cur){cur=grpDe(a);rows+=`<tr class="grp"><td colspan="11">${esc(cur)}</td></tr>`}
     const js=String(a.jours||"").split(",").filter(Boolean);
     rows+=`<tr data-id="${esc(a.id)}" class="${a.actif==="non"?"off":""} ${A.sel.has(a.id)?"sel":""}">
       <td><input type="checkbox" data-sel ${A.sel.has(a.id)?"checked":""} style="width:auto"></td>
@@ -457,6 +459,7 @@ async function pArticles(){
       <td><select data-f="fournisseurId">${fSel(a.fournisseurId)}</select></td>
       <td><input data-f="zone" value="${esc(a.zone)}" list="dl-zones" title="${esc(a.zone)}"></td>
       <td><textarea data-auto data-f="unite" rows="1">${esc(a.unite)}</textarea></td>
+      <td><select data-f="cartonnage"><option value="">—</option>${CARTONS.map(k=>`<option ${a.cartonnage===k?"selected":""}>${k}</option>`).join("")}</select></td>
       <td><input data-f="min" value="${esc(a.min)}" inputmode="decimal" placeholder="—" title="Commander si le stock est à ce niveau ou en dessous"></td>
       <td><input data-f="cible" value="${esc(a.cible)}" inputmode="decimal" placeholder="—" title="Quantité à avoir après la commande"></td>
       <td style="white-space:nowrap">${JC.map((j,i)=>`<label title="${JOURS[i]}" style="display:inline-flex;flex-direction:column;align-items:center;font-size:.7rem;color:var(--muted);margin-right:2px">${j}<input type="checkbox" data-jour="${i+1}" ${js.includes(String(i+1))?"checked":""} style="width:auto;margin:0"></label>`).join("")}</td>
@@ -468,14 +471,16 @@ async function pArticles(){
   <div class="tools">
     <input id="q" placeholder="🔍 Chercher un article…" value="${esc(A.q)}" style="width:240px">
     <select id="fz"><option value="">Toutes les zones</option>${zones.map(z=>`<option ${z===A.zone?"selected":""}>${esc(z)}</option>`).join("")}</select>
-    <select id="ff"><option value="">Tous les fournisseurs</option>${r.fournisseurs.slice().sort((a,b)=>a.nom.localeCompare(b.nom,"fr")).map(f=>`<option value="${esc(f.id)}" ${f.id===A.fourn?"selected":""}>${esc(f.nom)}</option>`).join("")}</select>
+    <select id="ff"><option value="">Tous les fournisseurs</option><option value="__sans" ${A.fourn==="__sans"?"selected":""}>Sans fournisseur (${arts.filter(a=>a.actif!=="non"&&!fo[a.fournisseurId]).length})</option>${r.fournisseurs.slice().sort((a,b)=>a.nom.localeCompare(b.nom,"fr")).map(f=>`<option value="${esc(f.id)}" ${f.id===A.fourn?"selected":""}>${esc(f.nom)}</option>`).join("")}</select>
+    <div class="chips">${[["zone","Par zone"],["fournisseur","Par fournisseur"]].map(([k,l])=>`<button class="chip" data-grp="${k}" aria-pressed="${A.grp===k}">${l}</button>`).join("")}</div>
     <div class="chips">${[["","Tous"],["sans","Sans seuil ("+sansSeuil+")"],["avec","Avec seuil"]].map(([k,l])=>`<button class="chip" data-seuil="${k}" aria-pressed="${A.seuil===k}">${l}</button>`).join("")}</div>
     <div class="chips">${[["actifs","Actifs"],["retires","Retirés"],["toutes","Tout"]].map(([k,l])=>`<button class="chip" data-etat="${k}" aria-pressed="${A.etat===k}">${l}</button>`).join("")}</div>
     <span class="muted small">${vis.length} article${vis.length>1?"s":""}${vis.length>MAX?` (les ${MAX} premiers affichés : affine la recherche)`:""}</span>
   </div>
-  <div class="scrollx"><table class="t" style="min-width:1080px"><colgroup><col style="width:32px"><col><col style="width:160px"><col style="width:196px"><col style="width:104px"><col style="width:58px"><col style="width:58px"><col style="width:146px"><col style="width:11%"><col style="width:50px"></colgroup><thead><tr><th></th><th>Article</th><th>Fournisseur</th><th>Zone</th><th>Unité</th><th title="Commander si le stock est à ce niveau ou en dessous">Mini</th><th title="Quantité à avoir après la commande">Cible</th><th>Jours d'inventaire</th><th>Note</th><th>Actif</th></tr></thead><tbody id="tb">${rows||`<tr><td colspan="10" class="muted" style="padding:20px">Aucun article</td></tr>`}</tbody></table></div>
+  <div class="scrollx"><table class="t" style="min-width:1170px"><colgroup><col style="width:32px"><col><col style="width:160px"><col style="width:196px"><col style="width:104px"><col style="width:96px"><col style="width:58px"><col style="width:58px"><col style="width:146px"><col style="width:11%"><col style="width:50px"></colgroup><thead><tr><th></th><th>Article</th><th>Fournisseur</th><th>Zone</th><th>Unité</th><th title="Comment le fournisseur livre : à l'unité, au kg, au paquet, au carton">Cartonnage</th><th title="Commander si le stock est à ce niveau ou en dessous">Mini</th><th title="Quantité à avoir après la commande">Cible</th><th>Jours d'inventaire</th><th>Note</th><th>Actif</th></tr></thead><tbody id="tb">${rows||`<tr><td colspan="11" class="muted" style="padding:20px">Aucun article</td></tr>`}</tbody></table></div>
   <div class="bulk" id="bulk" ${A.sel.size?"":"hidden"}><b></b>
     <input id="bz" list="dl-zones" placeholder="Zone…" style="width:150px"><select id="bf"><option value="">Fournisseur…</option>${fSel("").replace('<option value="">— aucun —</option>',"")}</select>
+    <select id="bk"><option value="">Cartonnage…</option>${CARTONS.map(k=>`<option>${k}</option>`).join("")}</select>
     <input id="bmin" placeholder="Mini" style="width:70px"><input id="bcib" placeholder="Cible" style="width:70px">
     <span class="small">Jours :</span>${JC.map((j,i)=>`<label class="small" title="${JOURS[i]}"><input type="checkbox" data-bj="${i+1}" style="width:auto">${j}</label>`).join("")}
     <button class="btn small sun" id="bapp">Appliquer</button><button class="btn small ghost" id="boff" style="color:inherit;border-color:currentColor">Retirer</button><button class="btn small ghost" id="bon" style="color:inherit;border-color:currentColor">Réactiver</button><button class="btn small ghost" id="bnone" style="color:inherit;border-color:currentColor;margin-left:auto">Désélectionner</button></div>
@@ -485,6 +490,7 @@ async function pArticles(){
   const majBulk=()=>{const b=$("#bulk");b.hidden=!A.sel.size;b.querySelector("b").textContent=A.sel.size+" sélectionné"+(A.sel.size>1?"s":"")};majBulk();
   let qt;$("#q").oninput=e=>{clearTimeout(qt);qt=setTimeout(()=>{A.q=e.target.value;reload().then(()=>{const i=$("#q");i.focus();i.setSelectionRange(i.value.length,i.value.length)})},300)};
   $("#fz").onchange=e=>{A.zone=e.target.value;reload()};$("#ff").onchange=e=>{A.fourn=e.target.value;reload()};
+  $("#main").querySelectorAll("[data-grp]").forEach(b=>b.onclick=()=>{A.grp=b.dataset.grp;reload()});
   $("#main").querySelectorAll("[data-seuil]").forEach(b=>b.onclick=()=>{A.seuil=b.dataset.seuil;reload()});
   $("#main").querySelectorAll("[data-etat]").forEach(b=>b.onclick=()=>{A.etat=b.dataset.etat;A.sel.clear();reload()});
   const saved=()=>{const s=$("#saved");if(s){s.textContent="✓ Enregistré";clearTimeout(saved.t);saved.t=setTimeout(()=>{if($("#saved"))$("#saved").textContent=""},1500)}};
@@ -496,11 +502,11 @@ async function pArticles(){
     else{const f=e.target.dataset.f;if(!f)return;let v=e.target.type==="checkbox"?(e.target.checked?"oui":"non"):e.target.value.trim();
       if((f==="min"||f==="cible")&&v!==""&&isNaN(+v.replace(",","."))){toast("Mets un nombre",true);e.target.value=byId[id][f];return}
       if(f==="min"||f==="cible")v=v.replace(",",".");data={id,[f]:v}}
-    try{await call("articleSave",data);Object.assign(byId[id],data);saved();if(data.actif||data.zone!==undefined)reload()}catch(err){toast(err.message,true);reload()}
+    try{await call("articleSave",data);Object.assign(byId[id],data);saved();if(data.actif||data.zone!==undefined||data.fournisseurId!==undefined)reload()}catch(err){toast(err.message,true);reload()}
   });
   const bulk=async(patch,msg)=>{const ids=[...A.sel];await act(()=>Promise.all(ids.map(id=>call("articleSave",Object.assign({id},patch)))),msg);A.sel.clear();reload()};
   $("#bapp").onclick=()=>{const p={};const z=$("#bz").value.trim(),f=$("#bf").value,mi=$("#bmin").value.trim(),ci=$("#bcib").value.trim();
-    if(z)p.zone=z;if(f)p.fournisseurId=f;if(mi)p.min=mi.replace(",",".");if(ci)p.cible=ci.replace(",",".");
+    if(z)p.zone=z;if(f)p.fournisseurId=f;if($("#bk").value)p.cartonnage=$("#bk").value;if(mi)p.min=mi.replace(",",".");if(ci)p.cible=ci.replace(",",".");
     const js=[...document.querySelectorAll("[data-bj]")].filter(c=>c.checked).map(c=>c.dataset.bj);if(js.length)p.jours=js.join(",");
     if(!Object.keys(p).length){toast("Remplis au moins un champ de la barre",true);return}bulk(p,"Articles modifiés")};
   $("#boff").onclick=()=>bulk({actif:"non"},"Articles retirés");$("#bon").onclick=()=>bulk({actif:"oui"},"Articles réactivés");$("#bnone").onclick=()=>{A.sel.clear();reload()};
@@ -509,7 +515,7 @@ async function pArticles(){
     <div class="g3"><label class="f">Unité<input id="n-u" list="dl-unites" value="unité"></label><label class="f">Mini<input id="n-mi"></label><label class="f">Cible<input id="n-ci"></label></div>
     <div class="acts"><button class="btn ghost" data-x>Annuler</button><button class="btn" data-y>Ajouter</button></div>`,(d,close)=>{d.querySelector("#n-n").focus();d.querySelector("[data-x]").onclick=close;
     d.querySelector("[data-y]").onclick=async()=>{try{await call("articleSave",{nom:d.querySelector("#n-n").value.trim(),fournisseurId:d.querySelector("#n-f").value,zone:d.querySelector("#n-z").value.trim(),unite:d.querySelector("#n-u").value.trim(),min:d.querySelector("#n-mi").value.trim(),cible:d.querySelector("#n-ci").value.trim(),jours:"1",actif:"oui"});toast("Article ajouté");close();reload()}catch(e){toast(e.message,true)}}});
-  $("#csv").onclick=()=>telecharger("Articles CLV.csv",[["Article","Fournisseur","Zone","Unité","Mini","Cible","Jours","Note","Actif"],...vis.map(a=>[a.nom,fo[a.fournisseurId]||"",a.zone,a.unite,a.min,a.cible,String(a.jours||"").split(",").filter(Boolean).map(j=>JOURS[j-1]).join(" "),a.note,a.actif])]);
+  $("#csv").onclick=()=>telecharger("Articles CLV.csv",[["Article","Fournisseur","Zone","Unité","Cartonnage","Mini","Cible","Jours","Note","Actif"],...vis.map(a=>[a.nom,fo[a.fournisseurId]||"",a.zone,a.unite,a.cartonnage||"",a.min,a.cible,String(a.jours||"").split(",").filter(Boolean).map(j=>JOURS[j-1]).join(" "),a.note,a.actif])]);
 }
 
 // =====================================================================================  FOURNISSEURS
