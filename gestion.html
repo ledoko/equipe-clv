@@ -39,6 +39,9 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--lagoon);outline-
 .muted{color:var(--muted)} .small{font-size:.85rem}
 .row{display:flex;gap:10px;align-items:center} .grow{flex:1;min-width:0} .wrap{flex-wrap:wrap}
 .pill{display:inline-block;border-radius:99px;padding:1px 8px;font-size:.75rem;font-weight:600;background:var(--soft);color:var(--muted)}
+.cmdgrid{display:grid;grid-template-columns:280px minmax(0,1fr);gap:16px;align-items:start}@media (max-width:1100px){.cmdgrid{grid-template-columns:1fr}}
+.cmdc{display:block;width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer}.cmdc.sel{border-color:var(--lagoon);box-shadow:0 0 0 2px var(--lagoon-soft)}
+table.t tr.low td:first-child{color:var(--bad);font-weight:600}
 .pill.ok{background:var(--ok-soft);color:var(--ok)} .pill.warn{background:var(--warn-soft);color:var(--warn)} .pill.info{background:var(--lagoon-soft);color:var(--lagoon)}
 
 /* mise en page : menu à gauche */
@@ -193,7 +196,7 @@ async function start(){
 }
 
 // ---------- coque : menu à gauche
-const PAGES=[["taches","✅","Tâches"],["planning","📅","Planning"],["articles","📦","Articles"],["fournisseurs","🚚","Fournisseurs"],["remplissage","🧴","Sauces & condiments"],["rapports","🧾","Rapports"],["equipe","👥","Équipe"]];
+const PAGES=[["taches","✅","Tâches"],["planning","📅","Planning"],["commandes","🛒","Commandes"],["articles","📦","Articles"],["fournisseurs","🚚","Fournisseurs"],["remplissage","🧴","Sauces & condiments"],["rapports","🧾","Rapports"],["equipe","👥","Équipe"]];
 function shell(){
   $("#root").innerHTML=`<div class="shell"><aside class="side"><div class="logo"><img src="icon-192.png" alt=""><b>Gestion<br>Café La Victoria</b></div>
   ${PAGES.map(([k,i,l,later])=>`<button class="nav ${later?"later":""}" data-v="${k}" ${view===k?'aria-current="page"':""} ${later?'title="Bientôt"':""}><span>${i}</span>${l}${k==="taches"?'<span class="n" id="nsugg" hidden></span>':""}${later?'<span class="muted small" style="margin-left:auto">bientôt</span>':""}</button>`).join("")}
@@ -201,7 +204,7 @@ function shell(){
   <main class="main" id="main"></main></div>`;
   $("#root").querySelectorAll(".nav:not(.later)").forEach(b=>b.onclick=()=>{view=b.dataset.v;shell()});
   $("#out").onclick=()=>confirmer("Se déconnecter ?","Tu devras retaper ton code.","Se déconnecter",async()=>{try{await call("deconnexion",{token})}catch(e){}logout()});
-  const fn={taches:pTaches,planning:pPlanning,articles:pArticles,fournisseurs:pFournisseurs,remplissage:pRemplissage,rapports:pRapports,equipe:pEquipe}[view]||pTaches;
+  const fn={taches:pTaches,planning:pPlanning,commandes:pCommandes,articles:pArticles,fournisseurs:pFournisseurs,remplissage:pRemplissage,rapports:pRapports,equipe:pEquipe}[view]||pTaches;
   $("#main").innerHTML=`<div class="spin"></div>`;
   fn().catch(e=>{$("#main").innerHTML=`<div class="card"><b>Oups</b><p class="muted">${esc(e.message)}</p><button class="btn" id="retry">Réessayer</button></div>`;$("#retry").onclick=shell});
 }
@@ -589,6 +592,105 @@ async function pRemplissage(){
   $("#tb").querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{const i=r.items.find(x=>x.id===b.dataset.del);confirmer(`Supprimer « ${i.nom} » ?`,"Il ne sera plus compté, et sa tâche « Remplir » en cours disparaît.","Supprimer",async()=>{await act(()=>call("remplissageSupprimer",{id:i.id}),"Supprimé");pRemplissage()})});
   $("#n-add").onclick=async()=>{const nom=$("#n-nom").value.trim();if(!nom){toast("Donne un nom",true);return}
     try{await call("remplissageSave",{nom,type:$("#n-type").value,cible:$("#n-cible").value||"6"});toast("Ajouté");pRemplissage()}catch(err){toast(err.message,true)}};
+}
+
+// =====================================================================================  COMMANDES
+const CM={sel:"",q:""};
+async function pCommandes(){
+  const r=await call("commandes");
+  const fo=id=>r.fournisseurs.find(f=>f.id===id)||{nom:"Sans fournisseur",email:"",telephone:"",canal:""};
+  const art={};r.articles.forEach(a=>art[a.id]=a);
+  const st=r.stock||{};
+  const ST={a_passer:["warn","À passer"],envoyee:["info","Envoyée"],recue:["ok","Reçue"]};
+  const ordre={a_passer:0,envoyee:1,recue:2};
+  const cmds=r.commandes.slice().sort((a,b)=>ordre[a.statut]-ordre[b.statut]||(b.creeLe<a.creeLe?-1:1));
+  if(!cmds.some(c=>c.id===CM.sel))CM.sel=(cmds[0]||{}).id||"";
+  const c=cmds.find(x=>x.id===CM.sel);
+  const dd=s=>s?`${s.slice(8,10)}/${s.slice(5,7)}`:"";
+  const stockTxt=id=>st[id]?`${st[id].qte} <span class="muted small">le ${dd(st[id].date)}</span>`:`<span class="muted small">jamais compté</span>`;
+  const carte=x=>{const [k,l]=ST[x.statut]||["",x.statut];return `<button class="card cmdc ${x.id===CM.sel?"sel":""}" data-c="${esc(x.id)}"><div class="row"><b class="grow">${esc(fo(x.fournisseurId).nom)}</b><span class="pill ${k}">${l}${x.statut==="envoyee"?" "+dd(x.envoyeeLe):x.statut==="recue"?" "+dd(x.recueLe):""}</span></div><div class="small muted">${x.lignes.length} ligne${x.lignes.length>1?"s":""} · créée le ${dd(x.creeLe)}</div></button>`};
+  const retard=(r.frequences||[]).filter(f=>f.retard);
+  let droite=`<div class="card"><p class="muted">Aucune commande. Crée-en une avec « + Nouvelle commande ».</p></div>`;
+  if(c){
+    const f=fo(c.fournisseurId), edit=c.statut==="a_passer";
+    const dans=new Set(c.lignes.map(l=>l.articleId).filter(Boolean));
+    const q=CM.q.trim().toLowerCase();
+    const dispo=r.articles.filter(a=>a.fournisseurId===c.fournisseurId&&!dans.has(a.id)&&(!q||(a.nom+" "+(a.ref||"")+" "+a.zone).toLowerCase().includes(q)))
+      .sort((a,b)=>(st[a.id]?0:1)-(st[b.id]?0:1)||(st[a.id]&&st[b.id]?st[a.id].qte-st[b.id].qte:0)||a.nom.localeCompare(b.nom,"fr"));
+    const bas=a=>st[a.id]&&(st[a.id].qte===0||(a.min!==""&&st[a.id].qte<=+a.min));
+    droite=`<div class="card">
+      <div class="row" style="gap:10px;align-items:center"><h2 class="grow" style="margin:0">${esc(f.nom)}</h2><span class="pill ${(ST[c.statut]||[""])[0]}">${(ST[c.statut]||["",c.statut])[1]}</span></div>
+      <p class="muted small" style="margin:6px 0 12px">${f.jourCommande?"⏰ Commander "+esc(f.jourCommande)+" · ":""}${f.email?"✉️ "+esc(f.email):f.telephone?"📞 "+esc(f.telephone):"Pas d'email ni de numéro : à remplir dans Fournisseurs"}</p>
+      <div class="scrollx"><table class="t" style="min-width:560px"><colgroup><col><col style="width:110px"><col style="width:110px"><col style="width:150px"><col style="width:46px"></colgroup>
+      <thead><tr><th>Article</th><th>Quantité</th><th>Unité</th><th>Dernier stock</th><th></th></tr></thead><tbody id="cl">
+      ${c.lignes.map((l,i)=>`<tr data-i="${i}"><td>${esc(l.nom)}${l.articleId&&art[l.articleId]&&art[l.articleId].ref?`<div class="small muted">${esc(art[l.articleId].ref)}</div>`:""}</td>
+        <td>${edit?`<input data-f="qte" type="number" min="0" step="any" value="${esc(l.qte)}">`:esc(l.qte)}</td>
+        <td>${edit?`<input data-f="unite" value="${esc(l.unite||"")}">`:esc(l.unite||"")}</td>
+        <td>${l.articleId?stockTxt(l.articleId):""}</td>
+        <td>${edit?`<button class="btn small ghost" data-del="${i}" title="Retirer">✕</button>`:""}</td></tr>`).join("")||`<tr><td colspan="5" class="muted">Commande vide : ajoute des articles ci-dessous.</td></tr>`}
+      </tbody></table></div>
+      <div class="row wrap" style="gap:8px;margin-top:14px">
+        ${edit?`<button class="btn" id="c-mail">${f.canal==="whatsapp"?"🟢 Préparer le WhatsApp":"✉️ Préparer l'email"}</button><button class="btn ghost" id="c-copy">Copier le texte</button><button class="btn sun" id="c-env">Marquer envoyée</button><button class="btn ghost" id="c-sup" style="margin-left:auto">Supprimer</button>`
+        :c.statut==="envoyee"?`<button class="btn" id="c-rec">Marquer reçue</button><button class="btn ghost" id="c-copy">Copier le texte</button><button class="btn ghost" id="c-back">Remettre « à passer »</button>`
+        :`<button class="btn ghost" id="c-copy">Copier le texte</button>`}
+      </div></div>
+    ${edit?`<div class="card" style="margin-top:16px"><div class="row" style="gap:10px;align-items:center"><h3 class="grow" style="margin:0">Ajouter des articles ${esc(f.nom)}</h3><input id="c-q" placeholder="🔍 Chercher…" value="${esc(CM.q)}" style="width:220px"></div>
+      <p class="muted small">Triés du stock le plus bas au plus haut (dernier inventaire). En rouge : à 0 ou sous le mini.</p>
+      <div style="max-height:460px;overflow:auto"><table class="t" style="min-width:640px"><colgroup><col><col style="width:150px"><col style="width:150px"><col style="width:110px"><col style="width:120px"></colgroup>
+      <thead><tr><th>Article</th><th>Zone</th><th>Dernier stock</th><th>Mini / cible</th><th></th></tr></thead><tbody id="ca">
+      ${dispo.map(a=>`<tr data-a="${esc(a.id)}" class="${bas(a)?"low":""}"><td>${esc(a.nom)}${a.ref?`<div class="small muted">${esc(a.ref)}</div>`:""}</td><td class="small">${esc(a.zone)}</td><td>${stockTxt(a.id)}</td><td class="small">${esc(a.min||"–")} / ${esc(a.cible||"–")}</td>
+        <td><div class="row" style="gap:4px"><input type="number" min="0" step="any" value="${esc(a.cible!==""&&st[a.id]?Math.max(1,Math.ceil(+a.cible-st[a.id].qte)):1)}" style="width:56px"><button class="btn small" data-add="${esc(a.id)}">+</button></div></td></tr>`).join("")||`<tr><td colspan="5" class="muted">Aucun autre article de ce fournisseur.</td></tr>`}
+      </tbody></table></div>
+      <div class="row" style="gap:8px;margin-top:10px"><input id="c-libre" placeholder="Autre chose (hors liste)…" style="flex:1"><input id="c-libreq" type="number" min="0" value="1" style="width:70px"><button class="btn ghost" id="c-libreok">Ajouter</button></div></div>`:""}`;
+  }
+  $("#main").innerHTML=`<div class="top"><h1 class="grow">Commandes</h1><span class="saved" id="saved"></span><select id="n-f" style="width:200px"><option value="">Fournisseur…</option>${r.fournisseurs.filter(f=>f.type==="marchandise").sort((a,b)=>a.nom.localeCompare(b.nom,"fr")).map(f=>`<option value="${esc(f.id)}">${esc(f.nom)}</option>`).join("")}</select><button class="btn" id="n-ok">+ Nouvelle commande</button></div>
+  ${retard.length?`<div class="card" style="margin-bottom:14px;border-color:var(--warn)"><b>Pas commandé depuis longtemps :</b> ${retard.map(f=>`${esc(f.nom)} (${f.depuis} j, d'habitude tous les ${Math.round(f.intervalle)} j)`).join(" · ")}</div>`:""}
+  <div class="cmdgrid">
+    <div style="display:flex;flex-direction:column;gap:8px">${cmds.map(carte).join("")||`<p class="muted small">Les commandes se créent quand un inventaire trouve un article sous son mini, ou avec « + Nouvelle commande ».</p>`}
+      <p class="muted small">Les commandes reçues restent affichées 14 jours.</p></div>
+    <div>${droite}</div>
+  </div>`;
+  $("#main").querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>{CM.sel=b.dataset.c;CM.q="";pCommandes()});
+  $("#n-ok").onclick=async()=>{const fid=$("#n-f").value;if(!fid){toast("Choisis un fournisseur",true);return}
+    const deja=cmds.find(x=>x.fournisseurId===fid&&x.statut==="a_passer");if(deja){CM.sel=deja.id;toast("Il y a déjà une commande à passer pour ce fournisseur");pCommandes();return}
+    try{CM.sel=await call("commandeNouvelle",{fournisseurId:fid});pCommandes()}catch(e){toast(e.message,true)}};
+  if(!c)return;
+  const f=fo(c.fournisseurId);
+  const ok=()=>{const s=$("#saved");if(s){s.textContent="✓ Enregistré";setTimeout(()=>{if($("#saved"))$("#saved").textContent=""},1500)}};
+  const sauver=async(lignes,recharger)=>{try{await call("commandeSave",{id:c.id,lignes});c.lignes=lignes.filter(l=>+l.qte>0);ok();if(recharger)pCommandes()}catch(e){toast(e.message,true);pCommandes()}};
+  // texte pour le fournisseur : nom catalogue (réf.) quand on l'a
+  const ligneTxt=l=>{const a=art[l.articleId]||{};const u=l.unite&&!/^unit/i.test(l.unite)?" "+l.unite:"";return `- ${a.ref||l.nom} : ${l.qte}${u}`};
+  const txt=()=>c.lignes.map(ligneTxt).join("\n");
+  const corps=()=>`Bonjour,\n\nPourriez-vous nous livrer :\n${txt()}\n\nMerci,\nDavid Gosselin\nCafé La Victoria (SUNSHINE COFFEE)`;
+  const copier=async t=>{try{await navigator.clipboard.writeText(t);toast("Copié")}catch(e){toast("Copie impossible",true)}};
+  const cp=$("#c-copy");if(cp)cp.onclick=()=>copier(corps());
+  const env=$("#c-env");if(env)env.onclick=()=>{if(!c.lignes.length){toast("Commande vide",true);return}confirmer(`Marquer la commande ${f.nom} envoyée ?`,"À faire une fois le message parti chez le fournisseur.","Marquer envoyée",async()=>{await act(()=>call("commandeSave",{id:c.id,statut:"envoyee"}),"Commande marquée envoyée");pCommandes()})};
+  const rec=$("#c-rec");if(rec)rec.onclick=async()=>{await act(()=>call("commandeSave",{id:c.id,statut:"recue"}),"Commande reçue");pCommandes()};
+  const bk=$("#c-back");if(bk)bk.onclick=async()=>{await act(()=>call("commandeSave",{id:c.id,statut:"a_passer"}),"Remise à passer");pCommandes()};
+  const sup=$("#c-sup");if(sup)sup.onclick=()=>confirmer(`Supprimer la commande ${f.nom} ?`,"Les lignes sont perdues.","Supprimer",async()=>{await act(()=>call("commandeSupprimer",{id:c.id}),"Commande supprimée");CM.sel="";pCommandes()});
+  const ml=$("#c-mail");if(ml)ml.onclick=()=>{
+    if(!c.lignes.length){toast("Commande vide",true);return}
+    const tel=String(f.telephone||"").replace(/[^\d+]/g,""),intl=tel.startsWith("+")?tel.slice(1):(tel.length===6?"687"+tel:tel);
+    const wa=f.canal==="whatsapp"&&tel, body=wa?`Bonjour, c'est David du Café La Victoria. Pour demain s'il vous plaît :\n${txt()}\nMerci !`:corps();
+    const href=wa?`https://wa.me/${intl}?text=${encodeURIComponent(body)}`:f.email?`mailto:${encodeURIComponent(f.email)}?subject=${encodeURIComponent("Commande Café La Victoria")}&body=${encodeURIComponent(body)}`:"";
+    dialog(`<h3>${esc(f.nom)}</h3>${f.jourCommande?`<p class="muted small">⏰ Commander ${esc(f.jourCommande)}</p>`:""}
+    <p class="muted small">${href?(wa?"Le bouton ouvre WhatsApp avec le message prêt : rien ne part tant que tu ne cliques pas sur Envoyer.":"Le bouton ouvre un brouillon dans ta messagerie : rien n'est envoyé tant que tu ne cliques pas sur Envoyer."):"Pas d'email pour ce fournisseur (page Fournisseurs) : copie le texte."}</p>
+    <textarea id="m-t" style="min-height:220px;width:100%">${esc(body)}</textarea>
+    <div class="acts"><button class="btn ghost" data-x>Fermer</button><button class="btn ghost" id="m-c">Copier</button>${href?`<a class="btn" id="m-o" href="${esc(href)}" target="_blank" rel="noopener">${wa?"Ouvrir WhatsApp":"Ouvrir le brouillon"}</a>`:""}</div>`,(d,close)=>{
+      d.querySelector("[data-x]").onclick=close;d.querySelector("#m-c").onclick=()=>copier(d.querySelector("#m-t").value);
+      const o=d.querySelector("#m-o");if(o)o.onclick=()=>setTimeout(()=>{close();confirmer("Message envoyé ?",`Si tu as envoyé la commande à ${f.nom}, marque-la envoyée.`,"Marquer envoyée",async()=>{await act(()=>call("commandeSave",{id:c.id,statut:"envoyee"}),"Commande marquée envoyée");pCommandes()})},400);
+    });
+  };
+  const cl=$("#cl");
+  if(cl&&c.statut==="a_passer"){
+    cl.addEventListener("change",e=>{const tr=e.target.closest("tr[data-i]"),k=e.target.dataset.f;if(!tr||!k)return;const L=c.lignes.map(l=>Object.assign({},l));L[+tr.dataset.i][k]=k==="qte"?String(e.target.value).replace(",","."):e.target.value.trim();sauver(L,k==="qte"&&!(+e.target.value>0))});
+    cl.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{const L=c.lignes.filter((l,i)=>i!==+b.dataset.del);sauver(L,true)});
+  }
+  const ca=$("#ca");
+  if(ca)ca.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>{const a=art[b.dataset.add],q=+String(b.parentNode.querySelector("input").value).replace(",",".");if(!(q>0)){toast("Quantité ?",true);return}
+    sauver(c.lignes.concat([{articleId:a.id,nom:a.nom,unite:a.cartonnage||a.unite||"",qte:q}]),true)});
+  const cq=$("#c-q");if(cq){let t;cq.oninput=e=>{clearTimeout(t);t=setTimeout(()=>{CM.q=e.target.value;pCommandes().then(()=>{const i=$("#c-q");if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}})},300)}}
+  const lo=$("#c-libreok");if(lo)lo.onclick=()=>{const n=$("#c-libre").value.trim(),q=+$("#c-libreq").value;if(!n||!(q>0)){toast("Nom et quantité",true);return}sauver(c.lignes.concat([{articleId:"",nom:n,unite:"",qte:q}]),true)};
 }
 
 // =====================================================================================  RAPPORTS
