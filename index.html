@@ -228,7 +228,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-14p";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-16a";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -779,7 +779,7 @@ Café La Victoria (SUNSHINE COFFEE)`:court;
     const lignes=c.lignes.map(l=>Object.assign({},l));
     const arts=r.articles.filter(a=>a.fournisseurId===c.fournisseurId);
     const draw=()=>open(`<h3>${esc(fo(c.fournisseurId).nom)}</h3>
-      <div>${lignes.map((l,i)=>`<div class="cl"><span class="grow">${esc(l.nom)}</span><input inputmode="decimal" data-q="${i}" value="${esc(l.qte)}"><button class="icon" data-rm="${i}" aria-label="Retirer">✕</button></div>`).join("")||`<p class="hint">Aucune ligne</p>`}</div>
+      <div>${lignes.map((l,i)=>`<div class="cl"><span class="grow">${esc(l.nom)}</span><input data-q="${i}" value="${esc(l.qte)}" maxlength="40" placeholder="ex. 2 cartons" style="max-width:130px"><button class="icon" data-rm="${i}" aria-label="Retirer">✕</button></div>`).join("")||`<p class="hint">Aucune ligne</p>`}</div>
       <div class="row"><select id="c-add" class="grow"><option value="">+ Ajouter un article…</option>${arts.map(a=>`<option value="${esc(a.id)}">${esc(a.nom)}</option>`).join("")}<option value="__libre">Autre (texte libre)…</option></select></div>
       <input id="c-libre" placeholder="Nom de l'article" hidden>
       <div class="actions"><button class="btn bad" id="c-del">Supprimer</button><button class="btn" id="c-ok">Enregistrer</button></div>`,()=>{

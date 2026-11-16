@@ -596,6 +596,7 @@ async function pRemplissage(){
 
 // =====================================================================================  COMMANDES
 const CM={sel:"",q:""};
+const vraieQte=q=>{q=String(q==null?"":q).trim();return q!==""&&!/^0+([.,]0+)?$/.test(q)};
 async function pCommandes(){
   const r=await call("commandes");
   const fo=id=>r.fournisseurs.find(f=>f.id===id)||{nom:"Sans fournisseur",email:"",telephone:"",canal:""};
@@ -621,10 +622,10 @@ async function pCommandes(){
     droite=`<div class="card">
       <div class="row" style="gap:10px;align-items:center"><h2 class="grow" style="margin:0">${esc(f.nom)}</h2><span class="pill ${(ST[c.statut]||[""])[0]}">${(ST[c.statut]||["",c.statut])[1]}</span></div>
       <p class="muted small" style="margin:6px 0 12px">${f.jourCommande?"⏰ Commander "+esc(f.jourCommande)+" · ":""}${f.email?"✉️ "+esc(f.email):f.telephone?"📞 "+esc(f.telephone):"Pas d'email ni de numéro : à remplir dans Fournisseurs"}</p>
-      <div class="scrollx"><table class="t" style="min-width:560px"><colgroup><col><col style="width:110px"><col style="width:110px"><col style="width:150px"><col style="width:46px"></colgroup>
+      <div class="scrollx"><table class="t" style="min-width:560px"><colgroup><col><col style="width:150px"><col style="width:100px"><col style="width:140px"><col style="width:46px"></colgroup>
       <thead><tr><th>Article</th><th>Quantité</th><th>Unité</th><th>Dernier stock</th><th></th></tr></thead><tbody id="cl">
       ${c.lignes.map((l,i)=>`<tr data-i="${i}"><td>${esc(l.nom)}${l.articleId&&art[l.articleId]&&art[l.articleId].ref?`<div class="small muted">${esc(art[l.articleId].ref)}</div>`:""}</td>
-        <td>${edit?`<input data-f="qte" type="number" min="0" step="any" value="${esc(l.qte)}">`:esc(l.qte)}</td>
+        <td>${edit?`<input data-f="qte" value="${esc(l.qte)}" placeholder="ex. 2 cartons" maxlength="40">`:esc(l.qte)}</td>
         <td>${edit?`<input data-f="unite" value="${esc(l.unite||"")}">`:esc(l.unite||"")}</td>
         <td>${l.articleId?stockTxt(l.articleId):""}</td>
         <td>${edit?`<button class="btn small ghost" data-del="${i}" title="Retirer">✕</button>`:""}</td></tr>`).join("")||`<tr><td colspan="5" class="muted">Commande vide : ajoute des articles ci-dessous.</td></tr>`}
@@ -635,13 +636,13 @@ async function pCommandes(){
         :`<button class="btn ghost" id="c-copy">Copier le texte</button>`}
       </div></div>
     ${edit?`<div class="card" style="margin-top:16px"><div class="row" style="gap:10px;align-items:center"><h3 class="grow" style="margin:0">Ajouter des articles ${esc(f.nom)}</h3><input id="c-q" placeholder="🔍 Chercher…" value="${esc(CM.q)}" style="width:220px"></div>
-      <p class="muted small">Triés du stock le plus bas au plus haut (dernier inventaire). En rouge : à 0 ou sous le mini.</p>
-      <div style="max-height:460px;overflow:auto"><table class="t" style="min-width:640px"><colgroup><col><col style="width:150px"><col style="width:150px"><col style="width:110px"><col style="width:120px"></colgroup>
+      <p class="muted small">Triés du stock le plus bas au plus haut (dernier inventaire). En rouge : à 0 ou sous le mini. La quantité peut être un nombre ou du texte : « 2 cartons », « 1 pack ».</p>
+      <div style="max-height:460px;overflow:auto"><table class="t" style="min-width:640px"><colgroup><col><col style="width:150px"><col style="width:150px"><col style="width:110px"><col style="width:150px"></colgroup>
       <thead><tr><th>Article</th><th>Zone</th><th>Dernier stock</th><th>Mini / cible</th><th></th></tr></thead><tbody id="ca">
       ${dispo.map(a=>`<tr data-a="${esc(a.id)}" class="${bas(a)?"low":""}"><td>${esc(a.nom)}${a.ref?`<div class="small muted">${esc(a.ref)}</div>`:""}</td><td class="small">${esc(a.zone)}</td><td>${stockTxt(a.id)}</td><td class="small">${esc(a.min||"–")} / ${esc(a.cible||"–")}</td>
-        <td><div class="row" style="gap:4px"><input type="number" min="0" step="any" value="${esc(a.cible!==""&&st[a.id]?Math.max(1,Math.ceil(+a.cible-st[a.id].qte)):1)}" style="width:56px"><button class="btn small" data-add="${esc(a.id)}">+</button></div></td></tr>`).join("")||`<tr><td colspan="5" class="muted">Aucun autre article de ce fournisseur.</td></tr>`}
+        <td><div class="row" style="gap:4px"><input value="${esc(a.cible!==""&&st[a.id]?Math.max(1,Math.ceil(+a.cible-st[a.id].qte)):1)}" maxlength="40" style="width:90px" title="Un nombre ou du texte : 2 cartons, 1 pack…"><button class="btn small" data-add="${esc(a.id)}">+</button></div></td></tr>`).join("")||`<tr><td colspan="5" class="muted">Aucun autre article de ce fournisseur.</td></tr>`}
       </tbody></table></div>
-      <div class="row" style="gap:8px;margin-top:10px"><input id="c-libre" placeholder="Autre chose (hors liste)…" style="flex:1"><input id="c-libreq" type="number" min="0" value="1" style="width:70px"><button class="btn ghost" id="c-libreok">Ajouter</button></div></div>`:""}`;
+      <div class="row" style="gap:8px;margin-top:10px"><input id="c-libre" placeholder="Autre chose (hors liste)…" style="flex:1"><input id="c-libreq" value="1" maxlength="40" style="width:120px" placeholder="ex. 1 carton"><button class="btn ghost" id="c-libreok">Ajouter</button></div></div>`:""}`;
   }
   $("#main").innerHTML=`<div class="top"><h1 class="grow">Commandes</h1><span class="saved" id="saved"></span><select id="n-f" style="width:200px"><option value="">Fournisseur…</option>${r.fournisseurs.filter(f=>f.type==="marchandise").sort((a,b)=>a.nom.localeCompare(b.nom,"fr")).map(f=>`<option value="${esc(f.id)}">${esc(f.nom)}</option>`).join("")}</select><button class="btn" id="n-ok">+ Nouvelle commande</button></div>
   ${retard.length?`<div class="card" style="margin-bottom:14px;border-color:var(--warn)"><b>Pas commandé depuis longtemps :</b> ${retard.map(f=>`${esc(f.nom)} (${f.depuis} j, d'habitude tous les ${Math.round(f.intervalle)} j)`).join(" · ")}</div>`:""}
@@ -659,7 +660,7 @@ async function pCommandes(){
   const ok=()=>{const s=$("#saved");if(s){s.textContent="✓ Enregistré";setTimeout(()=>{if($("#saved"))$("#saved").textContent=""},1500)}};
   const sauver=async(lignes,recharger)=>{try{await call("commandeSave",{id:c.id,lignes});c.lignes=lignes.filter(l=>+l.qte>0);ok();if(recharger)pCommandes()}catch(e){toast(e.message,true);pCommandes()}};
   // texte pour le fournisseur : nom catalogue (réf.) quand on l'a
-  const ligneTxt=l=>{const a=art[l.articleId]||{};const u=l.unite&&!/^unit/i.test(l.unite)?" "+l.unite:"";return `- ${a.ref||l.nom} : ${l.qte}${u}`};
+  const ligneTxt=l=>{const a=art[l.articleId]||{};const u=l.unite&&!/^unit/i.test(l.unite)&&/^[\d.,\s]+$/.test(String(l.qte))?" "+l.unite:"";return `- ${a.ref||l.nom} : ${l.qte}${u}`};
   const txt=()=>c.lignes.map(ligneTxt).join("\n");
   const corps=()=>`Bonjour,\n\nPourriez-vous nous livrer :\n${txt()}\n\nMerci,\nDavid Gosselin\nCafé La Victoria (SUNSHINE COFFEE)`;
   const copier=async t=>{try{await navigator.clipboard.writeText(t);toast("Copié")}catch(e){toast("Copie impossible",true)}};
@@ -683,14 +684,14 @@ async function pCommandes(){
   };
   const cl=$("#cl");
   if(cl&&c.statut==="a_passer"){
-    cl.addEventListener("change",e=>{const tr=e.target.closest("tr[data-i]"),k=e.target.dataset.f;if(!tr||!k)return;const L=c.lignes.map(l=>Object.assign({},l));L[+tr.dataset.i][k]=k==="qte"?String(e.target.value).replace(",","."):e.target.value.trim();sauver(L,k==="qte"&&!(+e.target.value>0))});
+    cl.addEventListener("change",e=>{const tr=e.target.closest("tr[data-i]"),k=e.target.dataset.f;if(!tr||!k)return;const L=c.lignes.map(l=>Object.assign({},l));L[+tr.dataset.i][k]=e.target.value.trim();sauver(L,k==="qte"&&!vraieQte(e.target.value))});
     cl.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{const L=c.lignes.filter((l,i)=>i!==+b.dataset.del);sauver(L,true)});
   }
   const ca=$("#ca");
-  if(ca)ca.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>{const a=art[b.dataset.add],q=+String(b.parentNode.querySelector("input").value).replace(",",".");if(!(q>0)){toast("Quantité ?",true);return}
+  if(ca)ca.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>{const a=art[b.dataset.add],q=b.parentNode.querySelector("input").value.trim();if(!vraieQte(q)){toast("Quantité ?",true);return}
     sauver(c.lignes.concat([{articleId:a.id,nom:a.nom,unite:a.cartonnage||a.unite||"",qte:q}]),true)});
   const cq=$("#c-q");if(cq){let t;cq.oninput=e=>{clearTimeout(t);t=setTimeout(()=>{CM.q=e.target.value;pCommandes().then(()=>{const i=$("#c-q");if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}})},300)}}
-  const lo=$("#c-libreok");if(lo)lo.onclick=()=>{const n=$("#c-libre").value.trim(),q=+$("#c-libreq").value;if(!n||!(q>0)){toast("Nom et quantité",true);return}sauver(c.lignes.concat([{articleId:"",nom:n,unite:"",qte:q}]),true)};
+  const lo=$("#c-libreok");if(lo)lo.onclick=()=>{const n=$("#c-libre").value.trim(),q=$("#c-libreq").value.trim();if(!n||!vraieQte(q)){toast("Nom et quantité",true);return}sauver(c.lignes.concat([{articleId:"",nom:n,unite:"",qte:q}]),true)};
 }
 
 // =====================================================================================  RAPPORTS
