@@ -546,7 +546,7 @@ async function pFournisseurs(){
     <td><textarea data-auto data-f="nom" rows="1">${esc(f.nom)}</textarea></td>
     <td><select data-f="type">${[["marchandise","Marchandise"],["frais","Frais généraux"],["à classer","À classer"]].map(([v,l])=>`<option value="${v}" ${(f.type===v||(v==="à classer"&&!["marchandise","frais"].includes(f.type)))?"selected":""}>${l}</option>`).join("")}</select></td>
     <td><select data-f="canal">${[["","—"],["email","Email"],["sms","SMS"],["whatsapp","WhatsApp"],["telephone","Téléphone"]].map(([v,l])=>`<option value="${v}" ${f.canal===v?"selected":""}>${l}</option>`).join("")}</select></td>
-    <td><div class="stack"><textarea data-auto data-f="email" rows="1" placeholder="email">${esc(f.email)}</textarea><input data-f="telephone" value="${esc(f.telephone)}" placeholder="téléphone"></div></td>
+    <td><div class="stack"><input data-f="contact" value="${esc(f.contact||"")}" placeholder="prénom du contact (Bonjour …)"><textarea data-auto data-f="email" rows="1" placeholder="email">${esc(f.email)}</textarea><input data-f="telephone" value="${esc(f.telephone)}" placeholder="téléphone"></div></td>
     <td><div class="stack"><textarea data-auto data-f="jourCommande" rows="1" placeholder="jour de commande">${esc(f.jourCommande)}</textarea><input data-f="delai" value="${esc(f.delai)}" placeholder="délai, ex. 2 jours"></div></td>
     <td class="small" style="overflow-wrap:anywhere">${rythme(f)}</td>
     <td style="text-align:center">${r.nbArticles[f.id]?`<button class="btn small ghost" data-arts="${esc(f.id)}" title="Voir ses articles">${r.nbArticles[f.id]}</button>`:`<span class="muted">0</span>`}</td>
@@ -596,6 +596,21 @@ async function pRemplissage(){
 }
 
 // =====================================================================================  COMMANDES
+// ---------- email de commande, sur le modèle des emails envoyés par David
+// Objet « Sunshine Coffee - Commande pour livraison le JJ/MM », « Bonjour <contact>, », lignes « quantité    article » triées par quantité.
+function livraisonDefaut(){const d=new Date(Date.now()+864e5);if(d.getDay()===0)d.setDate(d.getDate()+1);return d.toISOString().slice(0,10)}
+function mailCommande(c,f,art,livr){
+  const jj=String(livr||livraisonDefaut()).slice(8,10)+"/"+String(livr||livraisonDefaut()).slice(5,7);
+  const UN={carton:"Carton",paquet:"Paquet",pack:"Pack",balle:"Balle",sac:"Sac",poche:"Poche"};
+  const n=q=>{const m=/\d+([.,]\d+)?/.exec(String(q));return m?+m[0].replace(",","."):0};
+  const L=c.lignes.map(l=>{const a=(art&&art[l.articleId])||{},nom=a.ref||l.nom,q=String(l.qte).trim();
+    let qq=q;if(/^\d+([.,]\d+)?$/.test(q)){const u=UN[String(l.unite||"").toLowerCase()];if(u)qq=`${q} ${u}${+q>1?"s":""}`}
+    return {k:n(q),u:qq===q&&/^\d+([.,]\d+)?$/.test(q)?0:1,t:`${qq}    ${nom}`}}).sort((a,b)=>a.k-b.k||a.u-b.u||a.t.localeCompare(b.t,"fr"));
+  const lignes=L.map(x=>x.t).join("\n");
+  return {sujet:`Sunshine Coffee - Commande pour livraison le ${jj}`,
+    corps:`Bonjour${f.contact?" "+f.contact:""},\n\nUne commande pour livraison le ${jj}:\n\n${lignes}\n\nEn te remerciant,\n\nCordialement,\n`,
+    court:`Bonjour${f.contact?" "+f.contact:""}, c'est David du Café La Victoria. Une commande pour livraison le ${jj} :\n${lignes}\nMerci !`};
+}
 // Entrée dans une liste de saisie = passer à la ligne suivante (la dernière ferme le clavier)
 function entreeSuivante(box,sel){if(!box)return;box.addEventListener("keydown",e=>{if(e.key!=="Enter"||!e.target.matches(sel))return;e.preventDefault();
   const L=[...box.querySelectorAll(sel)].filter(x=>x.offsetParent!==null),i=L.indexOf(e.target),n=L[i+1];
@@ -670,7 +685,7 @@ async function pCommandes(garder){
   // texte pour le fournisseur : nom catalogue (réf.) quand on l'a
   const ligneTxt=l=>{const a=art[l.articleId]||{};const u=l.unite&&!/^unit/i.test(l.unite)&&/^[\d.,\s]+$/.test(String(l.qte))?" "+l.unite:"";return `- ${a.ref||l.nom} : ${l.qte}${u}`};
   const txt=()=>c.lignes.map(ligneTxt).join("\n");
-  const corps=()=>`Bonjour,\n\nPourriez-vous nous livrer :\n${txt()}\n\nMerci,\nDavid Gosselin\nCafé La Victoria (SUNSHINE COFFEE)`;
+  const corps=livr=>mailCommande(c,f,art,livr).corps;
   const copier=async t=>{try{await navigator.clipboard.writeText(t);toast("Copié")}catch(e){toast("Copie impossible",true)}};
   const cp=$("#c-copy");if(cp)cp.onclick=()=>copier(corps());
   const env=$("#c-env");if(env)env.onclick=()=>{if(!c.lignes.length){toast("Commande vide",true);return}confirmer(`Marquer la commande ${f.nom} envoyée ?`,"À faire une fois le message parti chez le fournisseur.","Marquer envoyée",async()=>{await act(()=>call("commandeSave",{id:c.id,statut:"envoyee"}),"Commande marquée envoyée");pCommandes()})};
@@ -680,13 +695,17 @@ async function pCommandes(garder){
   const ml=$("#c-mail");if(ml)ml.onclick=()=>{
     if(!c.lignes.length){toast("Commande vide",true);return}
     const tel=String(f.telephone||"").replace(/[^\d+]/g,""),intl=tel.startsWith("+")?tel.slice(1):(tel.length===6?"687"+tel:tel);
-    const wa=f.canal==="whatsapp"&&tel, body=wa?`Bonjour, c'est David du Café La Victoria. Pour demain s'il vous plaît :\n${txt()}\nMerci !`:corps();
-    const href=wa?`https://wa.me/${intl}?text=${encodeURIComponent(body)}`:f.email?`mailto:${encodeURIComponent(f.email)}?subject=${encodeURIComponent("Commande Café La Victoria")}&body=${encodeURIComponent(body)}`:"";
+    const wa=f.canal==="whatsapp"&&tel;
+    const lien=(livr,body)=>{const m=mailCommande(c,f,art,livr);body=body||(wa?m.court:m.corps);return wa?`https://wa.me/${intl}?text=${encodeURIComponent(body)}`:f.email?`mailto:${encodeURIComponent(f.email)}?subject=${encodeURIComponent(m.sujet)}&body=${encodeURIComponent(body)}`:""};
+    const l0=livraisonDefaut(), body=wa?mailCommande(c,f,art,l0).court:corps(l0), href=lien(l0,body);
     dialog(`<h3>${esc(f.nom)}</h3>${f.jourCommande?`<p class="muted small">⏰ Commander ${esc(f.jourCommande)}</p>`:""}
     <p class="muted small">${href?(wa?"Le bouton ouvre WhatsApp avec le message prêt : rien ne part tant que tu ne cliques pas sur Envoyer.":"Le bouton ouvre un brouillon dans ta messagerie : rien n'est envoyé tant que tu ne cliques pas sur Envoyer."):"Pas d'email pour ce fournisseur (page Fournisseurs) : copie le texte."}</p>
-    <textarea id="m-t" style="min-height:220px;width:100%">${esc(body)}</textarea>
+    <div class="row" style="gap:8px;align-items:center"><label class="small">Livraison le <input id="m-l" type="date" value="${l0}" style="width:auto"></label>${f.email&&!wa?`<span class="muted small">À : ${esc(f.email)} · Objet : <span id="m-s">${esc(mailCommande(c,f,art,l0).sujet)}</span></span>`:""}</div>
+    <textarea id="m-t" style="min-height:260px;width:100%">${esc(body)}</textarea>
     <div class="acts"><button class="btn ghost" data-x>Fermer</button><button class="btn ghost" id="m-c">Copier</button>${href?`<a class="btn" id="m-o" href="${esc(href)}" target="_blank" rel="noopener">${wa?"Ouvrir WhatsApp":"Ouvrir le brouillon"}</a>`:""}</div>`,(d,close)=>{
       d.querySelector("[data-x]").onclick=close;d.querySelector("#m-c").onclick=()=>copier(d.querySelector("#m-t").value);
+      const ta=d.querySelector("#m-t"),ml=d.querySelector("#m-l"),majLien=()=>{const o=d.querySelector("#m-o");if(o)o.href=lien(ml.value,ta.value);const s=d.querySelector("#m-s");if(s)s.textContent=mailCommande(c,f,art,ml.value).sujet};
+      ml.onchange=()=>{const m=mailCommande(c,f,art,ml.value);ta.value=wa?m.court:m.corps;majLien()};ta.oninput=majLien;
       const o=d.querySelector("#m-o");if(o)o.onclick=()=>setTimeout(()=>{close();confirmer("Message envoyé ?",`Si tu as envoyé la commande à ${f.nom}, marque-la envoyée.`,"Marquer envoyée",async()=>{await act(()=>call("commandeSave",{id:c.id,statut:"envoyee"}),"Commande marquée envoyée");pCommandes()})},400);
     });
   };

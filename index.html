@@ -229,7 +229,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-16c";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-16d";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -742,6 +742,21 @@ async function vGerer(){
 function backHead(title,subtitle){return header(`<button class="icon" id="back" aria-label="Retour" style="display:inline-grid;vertical-align:middle;margin-left:-8px">‹</button>${title}`,subtitle)}
 function bindBack(){$("#back").onclick=()=>go("gerer",null);bindOut()}
 
+// ---------- email de commande, sur le modèle des emails envoyés par David
+// Objet « Sunshine Coffee - Commande pour livraison le JJ/MM », « Bonjour <contact>, », lignes « quantité    article » triées par quantité.
+function livraisonDefaut(){const d=new Date(Date.now()+864e5);if(d.getDay()===0)d.setDate(d.getDate()+1);return d.toISOString().slice(0,10)}
+function mailCommande(c,f,art,livr){
+  const jj=String(livr||livraisonDefaut()).slice(8,10)+"/"+String(livr||livraisonDefaut()).slice(5,7);
+  const UN={carton:"Carton",paquet:"Paquet",pack:"Pack",balle:"Balle",sac:"Sac",poche:"Poche"};
+  const n=q=>{const m=/\d+([.,]\d+)?/.exec(String(q));return m?+m[0].replace(",","."):0};
+  const L=c.lignes.map(l=>{const a=(art&&art[l.articleId])||{},nom=a.ref||l.nom,q=String(l.qte).trim();
+    let qq=q;if(/^\d+([.,]\d+)?$/.test(q)){const u=UN[String(l.unite||"").toLowerCase()];if(u)qq=`${q} ${u}${+q>1?"s":""}`}
+    return {k:n(q),u:qq===q&&/^\d+([.,]\d+)?$/.test(q)?0:1,t:`${qq}    ${nom}`}}).sort((a,b)=>a.k-b.k||a.u-b.u||a.t.localeCompare(b.t,"fr"));
+  const lignes=L.map(x=>x.t).join("\n");
+  return {sujet:`Sunshine Coffee - Commande pour livraison le ${jj}`,
+    corps:`Bonjour${f.contact?" "+f.contact:""},\n\nUne commande pour livraison le ${jj}:\n\n${lignes}\n\nEn te remerciant,\n\nCordialement,\n`,
+    court:`Bonjour${f.contact?" "+f.contact:""}, c'est David du Café La Victoria. Une commande pour livraison le ${jj} :\n${lignes}\nMerci !`};
+}
 async function gCommandes(){
   const r=await call("commandes");
   const fo=id=>r.fournisseurs.find(f=>f.id===id)||{nom:"Sans fournisseur",email:""};
@@ -764,22 +779,13 @@ async function gCommandes(){
   app.querySelectorAll("[data-mail]").forEach(b=>b.onclick=()=>{const c=r.commandes.find(x=>x.id===b.dataset.mail),f=fo(c.fournisseurId);
     const canal=f.canal||(f.email?"email":f.telephone?"telephone":"email");
     const tel=String(f.telephone||"").replace(/[^\d+]/g,""), intl=tel.startsWith("+")?tel.slice(1):(tel.length===6?"687"+tel:tel);
-    const court=`Bonjour, c'est David du Café La Victoria. Pour demain s'il vous plaît :
-${txt(c)}
-Merci !`;
-    const body=canal==="email"?`Bonjour,
-
-Pourriez-vous nous livrer :
-${txt(c)}
-
-Merci,
-David Gosselin
-Café La Victoria (SUNSHINE COFFEE)`:court;
+    const art={};r.articles.forEach(a=>art[a.id]=a);
+    const m=mailCommande(c,f,art), court=m.court, body=canal==="email"?m.corps:court;
     let href="",bouton="",info="";
     if(canal==="sms"&&tel){href=`sms:+${intl}${IOS?"&":"?"}body=${encodeURIComponent(body)}`;bouton="Ouvrir le SMS";info="Le message s'ouvre dans tes SMS, prêt à envoyer : rien ne part tant que tu n'appuies pas sur Envoyer."}
     else if(canal==="whatsapp"&&tel){href=`https://wa.me/${intl}?text=${encodeURIComponent(body)}`;bouton="Ouvrir WhatsApp";info="Le message s'ouvre dans WhatsApp, prêt à envoyer : rien ne part tant que tu n'appuies pas sur Envoyer."}
     else if(canal==="telephone"&&tel){href=`tel:+${intl}`;bouton="Appeler "+f.telephone;info="Commande par téléphone : la liste ci-dessous sert d'aide-mémoire."}
-    else if(f.email){href=`mailto:${encodeURIComponent(f.email)}?subject=${encodeURIComponent("Commande Café La Victoria")}&body=${encodeURIComponent(body)}`;bouton="Ouvrir le brouillon";info="Le bouton ouvre un brouillon dans ta messagerie : rien n'est envoyé tant que tu ne cliques pas sur Envoyer."}
+    else if(f.email){href=`mailto:${encodeURIComponent(f.email)}?subject=${encodeURIComponent(m.sujet)}&body=${encodeURIComponent(body)}`;bouton="Ouvrir le brouillon";info="Le bouton ouvre un brouillon dans ta messagerie : rien n'est envoyé tant que tu ne cliques pas sur Envoyer."}
     else info="Pas d'email ni de numéro pour ce fournisseur (Gérer › Fournisseurs). Tu peux copier le texte.";
     open(`<h3>${esc(f.nom)}</h3>${f.jourCommande?`<p class="hint">⏰ Commander ${esc(f.jourCommande)}</p>`:""}<p class="hint">${esc(info)}</p><textarea readonly style="min-height:170px">${esc(body)}</textarea><div class="actions"><button class="btn ghost" id="m-x">Fermer</button>${href?`<a class="btn" href="${esc(href)}" target="_blank" rel="noopener">${esc(bouton)}</a>`:""}</div>`,()=>{$("#m-x").onclick=close});
   });
