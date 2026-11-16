@@ -670,7 +670,7 @@ async function pCommandes(garder){
         <td>${edit?`<button class="btn small ghost" data-del="${i}" title="Retirer">✕</button>`:""}</td></tr>`).join("")||`<tr><td colspan="5" class="muted">Commande vide : ajoute des articles ci-dessous.</td></tr>`}
       </tbody></table></div>
       <div class="row wrap" style="gap:8px;margin-top:14px">
-        ${edit?`<button class="btn" id="c-mail">${f.canal==="whatsapp"?"🟢 Préparer le WhatsApp":f.canal==="sms"?"💬 Préparer le SMS":"✉️ Préparer l'email"}</button><button class="btn ghost" id="c-copy">Copier le texte</button><button class="btn sun" id="c-env">Marquer envoyée</button><button class="btn ghost" id="c-sup" style="margin-left:auto">Supprimer</button>`
+        ${edit&&c.fournisseurId==="f_lavictoria"?`<button class="btn ghost" id="c-eta" title="Recalcule les grammes des thés en vrac d'après la dernière pesée (boîte ≈ 100 g, 250 g par boîte, par 50 g)">⚖️ Étalonner</button><button class="btn" id="c-shop" title="Crée un brouillon de commande Shopify au nom de SUNSHINE COFFEE (rien n'est facturé)">🛍️ Préparer dans Shopify</button>`:""}${edit?`<button class="btn${c.fournisseurId==="f_lavictoria"?" ghost":""}" id="c-mail">${f.canal==="whatsapp"?"🟢 Préparer le WhatsApp":f.canal==="sms"?"💬 Préparer le SMS":"✉️ Préparer l'email"}</button><button class="btn ghost" id="c-copy">Copier le texte</button><button class="btn sun" id="c-env">Marquer envoyée</button><button class="btn ghost" id="c-sup" style="margin-left:auto">Supprimer</button>`
         :c.statut==="envoyee"?`<button class="btn" id="c-rec">Marquer reçue</button><button class="btn ghost" id="c-copy">Copier le texte</button><button class="btn ghost" id="c-back">Remettre « à passer »</button>`
         :`<button class="btn ghost" id="c-copy">Copier le texte</button>`}
       </div></div>
@@ -709,6 +709,20 @@ async function pCommandes(garder){
   const rec=$("#c-rec");if(rec)rec.onclick=async()=>{await act(()=>call("commandeSave",{id:c.id,statut:"recue"}),"Commande reçue");pCommandes()};
   const bk=$("#c-back");if(bk)bk.onclick=async()=>{await act(()=>call("commandeSave",{id:c.id,statut:"a_passer"}),"Remise à passer");pCommandes()};
   const sup=$("#c-sup");if(sup)sup.onclick=()=>confirmer(`Supprimer la commande ${f.nom} ?`,"Les lignes sont perdues.","Supprimer",async()=>{await act(()=>call("commandeSupprimer",{id:c.id}),"Commande supprimée");CM.sel="";pCommandes()});
+  // ⚖️ Étalonner (La Victoria) : grammes des thés en vrac recalculés d'après la dernière pesée
+  const eta=$("#c-eta");if(eta)eta.onclick=async()=>{const r=await act(()=>call("commandeEtalonner",{id:c.id}));
+    const li=(t,a)=>a.length?`<p class="small"><b>${t}</b><br>${a.map(esc).join("<br>")}</p>`:"";
+    dialog(`<h3>⚖️ Thés étalonnés</h3>${li("Recalculés",r.calcules)}${li("Retirés (boîte encore pleine)",r.retires)}${li("Jamais pesés (inchangés)",r.nonPeses)}${!r.calcules.length&&!r.retires.length?`<p class="muted">Aucun thé en vrac pesé dans cette commande.</p>`:""}<div class="acts"><button class="btn" data-x>OK</button></div>`,(d,close)=>{d.querySelector("[data-x]").onclick=close});
+    pCommandes(true)};
+  // 🛍️ Brouillon Shopify (La Victoria) : créé par le serveur, rien n'est facturé ; David le valide dans Shopify
+  const shp=$("#c-shop");if(shp)shp.onclick=()=>{if(!c.lignes.length){toast("Commande vide",true);return}
+    confirmer("Préparer la commande dans Shopify ?",`Un brouillon de ${c.lignes.length} ligne${c.lignes.length>1?"s":""} sera créé au nom de SUNSHINE COFFEE. Rien n'est facturé : tu le valides dans Shopify.`,"Créer le brouillon",async()=>{
+      shp.disabled=true;shp.textContent="⏳ Shopify…";
+      let r;try{r=await send({action:"commandeShopify",token,data:{id:c.id}})}catch(e){toast(e.message,true);pCommandes(true);return}
+      dialog(`<h3>🛍️ Brouillon ${esc(r.nom)} créé</h3><p>${r.lignes} ligne${r.lignes>1?"s":""} · ${r.total.toLocaleString("fr-FR")} XPF</p>${r.manquants.length?`<p class="small"><b>Pas trouvés dans Shopify, à ajouter à la main :</b><br>${r.manquants.map(esc).join("<br>")}</p>`:""}
+        <div class="acts"><button class="btn ghost" data-x>Fermer</button><a class="btn" href="${esc(r.url)}" target="_blank" rel="noopener">Ouvrir dans Shopify</a><button class="btn sun" data-env>Marquer envoyée</button></div>`,(d,close)=>{d.querySelector("[data-x]").onclick=close;
+        d.querySelector("[data-env]").onclick=async()=>{close();await act(()=>call("commandeSave",{id:c.id,statut:"envoyee"}),"Commande marquée envoyée");pCommandes()}});
+      pCommandes(true)})};
   const ml=$("#c-mail");if(ml)ml.onclick=()=>{
     if(!c.lignes.length){toast("Commande vide",true);return}
     const tel=String(f.telephone||"").replace(/[^\d+]/g,""),intl=tel.startsWith("+")?tel.slice(1):(tel.length===6?"687"+tel:tel);
