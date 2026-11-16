@@ -598,7 +598,7 @@ async function pRemplissage(){
 // =====================================================================================  COMMANDES
 // ---------- email de commande, sur le modèle des emails envoyés par David
 // Objet « Sunshine Coffee - Commande pour livraison le JJ/MM », « Bonjour <contact>, », lignes « quantité    article » triées par quantité.
-function livraisonDefaut(){const d=new Date(Date.now()+864e5);if(d.getDay()===0)d.setDate(d.getDate()+1);return d.toISOString().slice(0,10)}
+function livraisonDefaut(){const d=new Date(Date.now()+864e5);if(d.getDay()===0)d.setDate(d.getDate()+1);return new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)} // date locale (Nouméa), pas UTC
 function mailCommande(c,f,art,livr){
   const jj=String(livr||livraisonDefaut()).slice(8,10)+"/"+String(livr||livraisonDefaut()).slice(5,7);
   // Mot de l'unité : celui de la ligne s'il est connu, sinon le cartonnage de l'article (« 3 Unités », « 2 Cartons », « 1,5 kg »)
@@ -612,7 +612,18 @@ function mailCommande(c,f,art,livr){
       else if(u)qq=`${q} ${u}${u!=="kg"&&n(q)>1?"s":""}`}
     return {k:n(q),u:qq===q&&/^\d+([.,]\d+)?$/.test(q)?0:1,t:`${qq}    ${nom}`}}).sort((a,b)=>a.k-b.k||a.u-b.u||a.t.localeCompare(b.t,"fr"));
   const lignes=L.map(x=>x.t).join("\n");
-  return {lignes:L.map(x=>x.t.split("    ")[0]).join("\n"),sujet:`Sunshine Coffee - Commande pour livraison le ${jj}`,
+  // SMS (ex. Tang Sneng Na / Nana) : sur le modèle des SMS de David
+  //   « Bonsoir Nana,\nPour livraison pour demain le 13/11:\n\n- 2 kg pomme verte\n- 3 bottes de persil\n\nEn te remerciant,\n\nDavid\nSunshine Coffee\nMirage Plaza, Baie des Citrons »
+  const L2=livr||livraisonDefaut(),auj=new Date(),iso=x=>new Date(x.getTime()-x.getTimezoneOffset()*6e4).toISOString().slice(0,10),dem=new Date(auj.getTime()+864e5);
+  const quand=L2===iso(auj)?`pour aujourd'hui ${jj}`:L2===iso(dem)?`pour demain le ${jj}`:`le ${jj}`;
+  const uSms=(l,a)=>{const lu=String(l.unite||"").trim();if(lu&&!/^unit/i.test(lu))return lu.toLowerCase();
+    const k=cle(a.unite);if(k==="botte")return "botte";if(k==="main")return "main";return cle(a.cartonnage)==="kg"||/^poids/i.test(a.unite||"")?"kg":""};
+  const smsL=c.lignes.map(l=>{const a=(art&&art[l.articleId])||{},q=String(l.qte).trim(),nom=String(l.nom||a.nom||"").toLowerCase();
+    if(!/^\d+([.,]\d+)?$/.test(q))return {k:n(q),t:`- ${q} ${nom}`};
+    let u=uSms(l,a);if(u==="botte"||u==="main")u=(n(q)>1?u+"s":u)+" de";
+    return {k:n(q),t:`- ${q}${u?" "+u:""} ${nom}`}});
+  const sms=`${auj.getHours()>=17?"Bonsoir":"Bonjour"}${f.contact?" "+f.contact:""},\nPour livraison ${quand}:\n\n${smsL.map(x=>x.t).join("\n")}\n\nEn te remerciant,\n\nDavid\nSunshine Coffee\nMirage Plaza, Baie des Citrons`;
+  return {sms,lignes:L.map(x=>x.t.split("    ")[0]).join("\n"),sujet:`Sunshine Coffee - Commande pour livraison le ${jj}`,
     corps:`Bonjour${f.contact?" "+f.contact:""},\n\nUne commande pour livraison le ${jj}:\n\n${lignes}\n\nEn te remerciant,\n\nCordialement,\n`,
     court:`Bonjour${f.contact?" "+f.contact:""}, c'est David du Café La Victoria. Une commande pour livraison le ${jj} :\n${lignes}\nMerci !`};
 }
@@ -658,7 +669,7 @@ async function pCommandes(garder){
         <td>${edit?`<button class="btn small ghost" data-del="${i}" title="Retirer">✕</button>`:""}</td></tr>`).join("")||`<tr><td colspan="5" class="muted">Commande vide : ajoute des articles ci-dessous.</td></tr>`}
       </tbody></table></div>
       <div class="row wrap" style="gap:8px;margin-top:14px">
-        ${edit?`<button class="btn" id="c-mail">${f.canal==="whatsapp"?"🟢 Préparer le WhatsApp":"✉️ Préparer l'email"}</button><button class="btn ghost" id="c-copy">Copier le texte</button><button class="btn sun" id="c-env">Marquer envoyée</button><button class="btn ghost" id="c-sup" style="margin-left:auto">Supprimer</button>`
+        ${edit?`<button class="btn" id="c-mail">${f.canal==="whatsapp"?"🟢 Préparer le WhatsApp":f.canal==="sms"?"💬 Préparer le SMS":"✉️ Préparer l'email"}</button><button class="btn ghost" id="c-copy">Copier le texte</button><button class="btn sun" id="c-env">Marquer envoyée</button><button class="btn ghost" id="c-sup" style="margin-left:auto">Supprimer</button>`
         :c.statut==="envoyee"?`<button class="btn" id="c-rec">Marquer reçue</button><button class="btn ghost" id="c-copy">Copier le texte</button><button class="btn ghost" id="c-back">Remettre « à passer »</button>`
         :`<button class="btn ghost" id="c-copy">Copier le texte</button>`}
       </div></div>
@@ -701,16 +712,17 @@ async function pCommandes(garder){
     if(!c.lignes.length){toast("Commande vide",true);return}
     const tel=String(f.telephone||"").replace(/[^\d+]/g,""),intl=tel.startsWith("+")?tel.slice(1):(tel.length===6?"687"+tel:tel);
     const wa=f.canal==="whatsapp"&&tel;
-    const lien=(livr,body)=>{const m=mailCommande(c,f,art,livr);body=body||(wa?m.court:m.corps);return wa?`https://wa.me/${intl}?text=${encodeURIComponent(body)}`:f.email?`mailto:${encodeURIComponent(f.email)}?subject=${encodeURIComponent(m.sujet)}&body=${encodeURIComponent(body)}`:""};
-    const l0=livraisonDefaut(), body=wa?mailCommande(c,f,art,l0).court:corps(l0), href=lien(l0,body);
+    const sms=f.canal==="sms";
+    const lien=(livr,body)=>{const m=mailCommande(c,f,art,livr);body=body||(wa?m.court:m.corps);if(sms)return "";return wa?`https://wa.me/${intl}?text=${encodeURIComponent(body)}`:f.email?`mailto:${encodeURIComponent(f.email)}?subject=${encodeURIComponent(m.sujet)}&body=${encodeURIComponent(body)}`:""};
+    const l0=livraisonDefaut(), body=sms?mailCommande(c,f,art,l0).sms:wa?mailCommande(c,f,art,l0).court:corps(l0), href=lien(l0,body);
     dialog(`<h3>${esc(f.nom)}</h3>${f.jourCommande?`<p class="muted small">⏰ Commander ${esc(f.jourCommande)}</p>`:""}
-    <p class="muted small">${href?(wa?"Le bouton ouvre WhatsApp avec le message prêt : rien ne part tant que tu ne cliques pas sur Envoyer.":"Le bouton ouvre un brouillon dans ta messagerie : rien n'est envoyé tant que tu ne cliques pas sur Envoyer."):"Pas d'email pour ce fournisseur (page Fournisseurs) : copie le texte."}</p>
+    <p class="muted small">${sms?"Commande par SMS : copie le texte et colle-le dans tes SMS (ou ouvre la commande sur le téléphone, le bouton ouvre le SMS prêt à envoyer).":href?(wa?"Le bouton ouvre WhatsApp avec le message prêt : rien ne part tant que tu ne cliques pas sur Envoyer.":"Le bouton ouvre un brouillon dans ta messagerie : rien n'est envoyé tant que tu ne cliques pas sur Envoyer."):"Pas d'email pour ce fournisseur (page Fournisseurs) : copie le texte."}</p>
     <div class="row" style="gap:8px;align-items:center"><label class="small">Livraison le <input id="m-l" type="date" value="${l0}" style="width:auto"></label>${f.email&&!wa?`<span class="muted small">À : ${esc(f.email)} · Objet : <span id="m-s">${esc(mailCommande(c,f,art,l0).sujet)}</span></span>`:""}</div>
     <textarea id="m-t" style="min-height:260px;width:100%">${esc(body)}</textarea>
     <div class="acts"><button class="btn ghost" data-x>Fermer</button><button class="btn ghost" id="m-c">Copier</button>${href?`<a class="btn" id="m-o" href="${esc(href)}" target="_blank" rel="noopener">${wa?"Ouvrir WhatsApp":"Ouvrir le brouillon"}</a>`:""}</div>`,(d,close)=>{
       d.querySelector("[data-x]").onclick=close;d.querySelector("#m-c").onclick=()=>copier(d.querySelector("#m-t").value);
       const ta=d.querySelector("#m-t"),ml=d.querySelector("#m-l"),majLien=()=>{const o=d.querySelector("#m-o");if(o)o.href=lien(ml.value,ta.value);const s=d.querySelector("#m-s");if(s)s.textContent=mailCommande(c,f,art,ml.value).sujet};
-      ml.onchange=()=>{const m=mailCommande(c,f,art,ml.value);ta.value=wa?m.court:m.corps;majLien()};ta.oninput=majLien;
+      ml.onchange=()=>{const m=mailCommande(c,f,art,ml.value);ta.value=sms?m.sms:wa?m.court:m.corps;majLien()};ta.oninput=majLien;
       const o=d.querySelector("#m-o");if(o)o.onclick=()=>setTimeout(()=>{close();confirmer("Message envoyé ?",`Si tu as envoyé la commande à ${f.nom}, marque-la envoyée.`,"Marquer envoyée",async()=>{await act(()=>call("commandeSave",{id:c.id,statut:"envoyee"}),"Commande marquée envoyée");pCommandes()})},400);
     });
   };
