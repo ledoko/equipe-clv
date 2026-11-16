@@ -635,8 +635,8 @@ async function pCommandes(){
         :c.statut==="envoyee"?`<button class="btn" id="c-rec">Marquer reçue</button><button class="btn ghost" id="c-copy">Copier le texte</button><button class="btn ghost" id="c-back">Remettre « à passer »</button>`
         :`<button class="btn ghost" id="c-copy">Copier le texte</button>`}
       </div></div>
-    ${edit?`<div class="card" style="margin-top:16px"><div class="row" style="gap:10px;align-items:center"><h3 class="grow" style="margin:0">Ajouter des articles ${esc(f.nom)}</h3><input id="c-q" placeholder="🔍 Chercher…" value="${esc(CM.q)}" style="width:220px"></div>
-      <p class="muted small">Triés du stock le plus bas au plus haut (dernier inventaire). En rouge : à 0 ou sous le mini. La quantité peut être un nombre ou du texte : « 2 cartons », « 1 pack ».</p>
+    ${edit?`<div class="card" style="margin-top:16px"><div class="row" style="gap:10px;align-items:center"><h3 class="grow" style="margin:0">Ajouter des articles ${esc(f.nom)}</h3>${dispo.some(bas)?`<button class="btn sun" id="c-bas">+ Tout le stock bas (${dispo.filter(bas).length})</button>`:""}<input id="c-q" placeholder="🔍 Chercher…" value="${esc(CM.q)}" style="width:220px"></div>
+      <p class="muted small">Triés du stock le plus bas au plus haut (dernier inventaire). En rouge : à 0, ou au mini et en dessous (sans mini réglé : seulement à 0). La quantité peut être un nombre ou du texte : « 2 cartons », « 1 pack ».</p>
       <div style="max-height:460px;overflow:auto"><table class="t" style="min-width:640px"><colgroup><col><col style="width:150px"><col style="width:150px"><col style="width:110px"><col style="width:150px"></colgroup>
       <thead><tr><th>Article</th><th>Zone</th><th>Dernier stock</th><th>Mini / cible</th><th></th></tr></thead><tbody id="ca">
       ${dispo.map(a=>`<tr data-a="${esc(a.id)}" class="${bas(a)?"low":""}"><td>${esc(a.nom)}${a.ref?`<div class="small muted">${esc(a.ref)}</div>`:""}</td><td class="small">${esc(a.zone)}</td><td>${stockTxt(a.id)}</td><td class="small">${esc(a.min||"–")} / ${esc(a.cible||"–")}</td>
@@ -690,6 +690,10 @@ async function pCommandes(){
   const ca=$("#ca");
   if(ca)ca.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>{const a=art[b.dataset.add],q=b.parentNode.querySelector("input").value.trim();if(!vraieQte(q)){toast("Quantité ?",true);return}
     sauver(c.lignes.concat([{articleId:a.id,nom:a.nom,unite:a.cartonnage||a.unite||"",qte:q}]),true)});
+  const cb=$("#c-bas");if(cb)cb.onclick=()=>{const dans=new Set(c.lignes.map(l=>l.articleId));
+    const add=r.articles.filter(a=>a.fournisseurId===c.fournisseurId&&!dans.has(a.id)&&st[a.id]&&(st[a.id].qte===0||(a.min!==""&&st[a.id].qte<=+a.min)))
+      .map(a=>({articleId:a.id,nom:a.nom,unite:a.cartonnage||a.unite||"",qte:a.cible!==""?Math.max(1,Math.ceil(+a.cible-st[a.id].qte)):1}));
+    sauver(c.lignes.concat(add),true);toast(add.length+" article"+(add.length>1?"s":"")+" ajouté"+(add.length>1?"s":""))};
   const cq=$("#c-q");if(cq){let t;cq.oninput=e=>{clearTimeout(t);t=setTimeout(()=>{CM.q=e.target.value;pCommandes().then(()=>{const i=$("#c-q");if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}})},300)}}
   const lo=$("#c-libreok");if(lo)lo.onclick=()=>{const n=$("#c-libre").value.trim(),q=$("#c-libreq").value.trim();if(!n||!vraieQte(q)){toast("Nom et quantité",true);return}sauver(c.lignes.concat([{articleId:"",nom:n,unite:"",qte:q}]),true)};
 }
