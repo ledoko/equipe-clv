@@ -598,9 +598,10 @@ async function pRemplissage(){
 // =====================================================================================  COMMANDES
 // ---------- email de commande, sur le modèle des emails envoyés par David
 // Objet « Sunshine Coffee - Commande pour livraison le JJ/MM », « Bonjour <contact>, », lignes « quantité    article » triées par quantité.
-function livraisonDefaut(){const d=new Date(Date.now()+864e5);if(d.getDay()===0)d.setDate(d.getDate()+1);return new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)} // date locale (Nouméa), pas UTC
+function livraisonDefaut(f){const d=new Date(Date.now()+(f&&f.canal==="sms"&&new Date().getHours()<12?0:864e5)); // SMS envoyé le matin = livraison aujourd'hui
+  if(d.getDay()===0)d.setDate(d.getDate()+1);return new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)} // date locale (Nouméa), pas UTC
 function mailCommande(c,f,art,livr){
-  const jj=String(livr||livraisonDefaut()).slice(8,10)+"/"+String(livr||livraisonDefaut()).slice(5,7);
+  const jj=String(livr||livraisonDefaut(f)).slice(8,10)+"/"+String(livr||livraisonDefaut(f)).slice(5,7);
   // Mot de l'unité : celui de la ligne s'il est connu, sinon le cartonnage de l'article (« 3 Unités », « 2 Cartons », « 1,5 kg »)
   const UN={carton:"Carton",paquet:"Paquet",pack:"Pack",balle:"Balle",sac:"Sac",poche:"Poche",unite:"Unité",unit:"Unité",kg:"kg",sachet:"Sachet",boite:"Boîte",bouteille:"Bouteille",bidon:"Bidon",filet:"Filet",seau:"Seau",bloc:"Bloc"};
   const cle=u=>String(u||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().replace(/s$/,"");
@@ -614,7 +615,7 @@ function mailCommande(c,f,art,livr){
   const lignes=L.map(x=>x.t).join("\n");
   // SMS (ex. Tang Sneng Na / Nana) : sur le modèle des SMS de David
   //   « Bonsoir Nana,\nPour livraison pour demain le 13/11:\n\n- 2 kg pomme verte\n- 3 bottes de persil\n\nEn te remerciant,\n\nDavid\nSunshine Coffee\nMirage Plaza, Baie des Citrons »
-  const L2=livr||livraisonDefaut(),auj=new Date(),iso=x=>new Date(x.getTime()-x.getTimezoneOffset()*6e4).toISOString().slice(0,10),dem=new Date(auj.getTime()+864e5);
+  const L2=livr||livraisonDefaut(f),auj=new Date(),iso=x=>new Date(x.getTime()-x.getTimezoneOffset()*6e4).toISOString().slice(0,10),dem=new Date(auj.getTime()+864e5);
   const quand=L2===iso(auj)?`pour aujourd'hui ${jj}`:L2===iso(dem)?`pour demain le ${jj}`:`le ${jj}`;
   const uSms=(l,a)=>{const lu=String(l.unite||"").trim();if(lu&&!/^unit/i.test(lu))return lu.toLowerCase();
     const k=cle(a.unite);if(k==="botte")return "botte";if(k==="main")return "main";return cle(a.cartonnage)==="kg"||/^poids/i.test(a.unite||"")?"kg":""};
@@ -714,7 +715,7 @@ async function pCommandes(garder){
     const wa=f.canal==="whatsapp"&&tel;
     const sms=f.canal==="sms";
     const lien=(livr,body)=>{const m=mailCommande(c,f,art,livr);body=body||(wa?m.court:m.corps);if(sms)return "";return wa?`https://wa.me/${intl}?text=${encodeURIComponent(body)}`:f.email?`mailto:${encodeURIComponent(f.email)}?subject=${encodeURIComponent(m.sujet)}&body=${encodeURIComponent(body)}`:""};
-    const l0=livraisonDefaut(), body=sms?mailCommande(c,f,art,l0).sms:wa?mailCommande(c,f,art,l0).court:corps(l0), href=lien(l0,body);
+    const l0=livraisonDefaut(f), body=sms?mailCommande(c,f,art,l0).sms:wa?mailCommande(c,f,art,l0).court:corps(l0), href=lien(l0,body);
     dialog(`<h3>${esc(f.nom)}</h3>${f.jourCommande?`<p class="muted small">⏰ Commander ${esc(f.jourCommande)}</p>`:""}
     <p class="muted small">${sms?"Commande par SMS : copie le texte et colle-le dans tes SMS (ou ouvre la commande sur le téléphone, le bouton ouvre le SMS prêt à envoyer).":href?(wa?"Le bouton ouvre WhatsApp avec le message prêt : rien ne part tant que tu ne cliques pas sur Envoyer.":"Le bouton ouvre un brouillon dans ta messagerie : rien n'est envoyé tant que tu ne cliques pas sur Envoyer."):"Pas d'email pour ce fournisseur (page Fournisseurs) : copie le texte."}</p>
     <div class="row" style="gap:8px;align-items:center"><label class="small">Livraison le <input id="m-l" type="date" value="${l0}" style="width:auto"></label>${f.email&&!wa?`<span class="muted small">À : ${esc(f.email)} · Objet : <span id="m-s">${esc(mailCommande(c,f,art,l0).sujet)}</span></span>`:""}</div>
