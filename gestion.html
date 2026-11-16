@@ -598,7 +598,9 @@ async function pRemplissage(){
 // =====================================================================================  COMMANDES
 const CM={sel:"",q:""};
 const vraieQte=q=>{q=String(q==null?"":q).trim();return q!==""&&!/^0+([.,]0+)?$/.test(q)};
-async function pCommandes(){
+async function pCommandes(garder){
+  // garder = true : on reste au même endroit dans les listes après un ajout ou une modification
+  const pos=garder?{l:($("#ca-wrap")||{}).scrollTop||0,m:($("#main")||{}).scrollTop||0,w:window.scrollY}:null;
   const r=await call("commandes");
   const fo=id=>r.fournisseurs.find(f=>f.id===id)||{nom:"Sans fournisseur",email:"",telephone:"",canal:""};
   const art={};r.articles.forEach(a=>art[a.id]=a);
@@ -609,7 +611,7 @@ async function pCommandes(){
   if(!cmds.some(c=>c.id===CM.sel))CM.sel=(cmds[0]||{}).id||"";
   const c=cmds.find(x=>x.id===CM.sel);
   const dd=s=>s?`${s.slice(8,10)}/${s.slice(5,7)}`:"";
-  const stockTxt=id=>st[id]?`${st[id].qte} <span class="muted small">le ${dd(st[id].date)}</span>`:`<span class="muted small">jamais compté</span>`;
+  const stockTxt=id=>st[id]?`${esc(st[id].texte||st[id].qte)} <span class="muted small">le ${dd(st[id].date)}</span>`:`<span class="muted small">jamais compté</span>`;
   const carte=x=>{const [k,l]=ST[x.statut]||["",x.statut];return `<button class="card cmdc ${x.id===CM.sel?"sel":""}" data-c="${esc(x.id)}"><div class="row"><b class="grow">${esc(fo(x.fournisseurId).nom)}</b><span class="pill ${k}">${l}${x.statut==="envoyee"?" "+dd(x.envoyeeLe):x.statut==="recue"?" "+dd(x.recueLe):""}</span></div><div class="small muted">${x.lignes.length} ligne${x.lignes.length>1?"s":""} · créée le ${dd(x.creeLe)}</div></button>`};
   const retard=(r.frequences||[]).filter(f=>f.retard);
   let droite=`<div class="card"><p class="muted">Aucune commande. Crée-en une avec « + Nouvelle commande ».</p></div>`;
@@ -618,7 +620,7 @@ async function pCommandes(){
     const dans=new Set(c.lignes.map(l=>l.articleId).filter(Boolean));
     const q=CM.q.trim().toLowerCase();
     const dispo=r.articles.filter(a=>a.fournisseurId===c.fournisseurId&&!dans.has(a.id)&&(!q||(a.nom+" "+(a.ref||"")+" "+a.zone).toLowerCase().includes(q)))
-      .sort((a,b)=>(st[a.id]?0:1)-(st[b.id]?0:1)||(st[a.id]&&st[b.id]?st[a.id].qte-st[b.id].qte:0)||a.nom.localeCompare(b.nom,"fr"));
+      .sort((a,b)=>(st[a.id]?0:1)-(st[b.id]?0:1)||(st[a.id]&&st[b.id]?(st[a.id].qte==null?999:st[a.id].qte)-(st[b.id].qte==null?999:st[b.id].qte):0)||a.nom.localeCompare(b.nom,"fr"));
     const bas=a=>st[a.id]&&(st[a.id].qte===0||(a.min!==""&&st[a.id].qte<=+a.min));
     droite=`<div class="card">
       <div class="row" style="gap:10px;align-items:center"><h2 class="grow" style="margin:0">${esc(f.nom)}</h2><span class="pill ${(ST[c.statut]||[""])[0]}">${(ST[c.statut]||["",c.statut])[1]}</span></div>
@@ -638,10 +640,10 @@ async function pCommandes(){
       </div></div>
     ${edit?`<div class="card"><div class="row wrap" style="gap:10px;align-items:center"><h3 class="grow" style="margin:0">Ajouter des articles ${esc(f.nom)}</h3>${dispo.some(bas)?`<button class="btn sun" id="c-bas">+ Tout le stock bas (${dispo.filter(bas).length})</button>`:""}<input id="c-q" placeholder="🔍 Chercher…" value="${esc(CM.q)}" style="width:180px"></div>
       <p class="muted small">Triés du stock le plus bas au plus haut (dernier inventaire). En rouge : à 0, ou au mini et en dessous (sans mini réglé : seulement à 0). La quantité peut être un nombre ou du texte : « 2 cartons », « 1 pack ».</p>
-      <div style="max-height:calc(100vh - 290px);min-height:300px;overflow:auto"><table class="t" style="min-width:460px"><colgroup><col><col style="width:96px"><col style="width:100px"><col style="width:70px"><col style="width:120px"></colgroup>
+      <div id="ca-wrap" style="max-height:calc(100vh - 290px);min-height:300px;overflow:auto"><table class="t" style="min-width:460px"><colgroup><col><col style="width:96px"><col style="width:100px"><col style="width:70px"><col style="width:120px"></colgroup>
       <thead><tr><th>Article</th><th>Zone</th><th>Dernier stock</th><th>Mini / cible</th><th></th></tr></thead><tbody id="ca">
       ${dispo.map(a=>`<tr data-a="${esc(a.id)}" class="${bas(a)?"low":""}"><td>${esc(a.nom)}${a.ref?`<div class="small muted">${esc(a.ref)}</div>`:""}</td><td class="small">${esc(a.zone)}</td><td>${stockTxt(a.id)}</td><td class="small">${esc(a.min||"–")} / ${esc(a.cible||"–")}</td>
-        <td><div class="row" style="gap:4px"><input value="${esc(a.cible!==""&&st[a.id]?Math.max(1,Math.ceil(+a.cible-st[a.id].qte)):1)}" maxlength="40" style="width:76px" title="Un nombre ou du texte : 2 cartons, 1 pack…"><button class="btn small" data-add="${esc(a.id)}">+</button></div></td></tr>`).join("")||`<tr><td colspan="5" class="muted">Aucun autre article de ce fournisseur.</td></tr>`}
+        <td><div class="row" style="gap:4px"><input value="${esc(a.cible!==""&&st[a.id]&&st[a.id].qte!=null?Math.max(1,Math.ceil(+a.cible-st[a.id].qte)):1)}" maxlength="40" style="width:76px" title="Un nombre ou du texte : 2 cartons, 1 pack…"><button class="btn small" data-add="${esc(a.id)}">+</button></div></td></tr>`).join("")||`<tr><td colspan="5" class="muted">Aucun autre article de ce fournisseur.</td></tr>`}
       </tbody></table></div>
       <div class="row" style="gap:8px;margin-top:10px"><input id="c-libre" placeholder="Autre chose (hors liste)…" style="flex:1"><input id="c-libreq" value="1" maxlength="40" style="width:120px" placeholder="ex. 1 carton"><button class="btn ghost" id="c-libreok">Ajouter</button></div></div>`:""}`;
   }
@@ -656,10 +658,11 @@ async function pCommandes(){
   $("#n-ok").onclick=async()=>{const fid=$("#n-f").value;if(!fid){toast("Choisis un fournisseur",true);return}
     const deja=cmds.find(x=>x.fournisseurId===fid&&x.statut==="a_passer");if(deja){CM.sel=deja.id;toast("Il y a déjà une commande à passer pour ce fournisseur");pCommandes();return}
     try{CM.sel=await call("commandeNouvelle",{fournisseurId:fid});pCommandes()}catch(e){toast(e.message,true)}};
+  if(pos){const w=$("#ca-wrap");if(w)w.scrollTop=pos.l;const m=$("#main");if(m)m.scrollTop=pos.m;window.scrollTo(0,pos.w)}
   if(!c)return;
   const f=fo(c.fournisseurId);
   const ok=()=>{const s=$("#saved");if(s){s.textContent="✓ Enregistré";setTimeout(()=>{if($("#saved"))$("#saved").textContent=""},1500)}};
-  const sauver=async(lignes,recharger)=>{try{await call("commandeSave",{id:c.id,lignes});c.lignes=lignes.filter(l=>+l.qte>0);ok();if(recharger)pCommandes()}catch(e){toast(e.message,true);pCommandes()}};
+  const sauver=async(lignes,recharger)=>{try{await call("commandeSave",{id:c.id,lignes});c.lignes=lignes.filter(l=>vraieQte(l.qte));ok();if(recharger)pCommandes(true)}catch(e){toast(e.message,true);pCommandes(true)}};
   // texte pour le fournisseur : nom catalogue (réf.) quand on l'a
   const ligneTxt=l=>{const a=art[l.articleId]||{};const u=l.unite&&!/^unit/i.test(l.unite)&&/^[\d.,\s]+$/.test(String(l.qte))?" "+l.unite:"";return `- ${a.ref||l.nom} : ${l.qte}${u}`};
   const txt=()=>c.lignes.map(ligneTxt).join("\n");
@@ -693,7 +696,7 @@ async function pCommandes(){
     sauver(c.lignes.concat([{articleId:a.id,nom:a.nom,unite:a.cartonnage||a.unite||"",qte:q}]),true)});
   const cb=$("#c-bas");if(cb)cb.onclick=()=>{const dans=new Set(c.lignes.map(l=>l.articleId));
     const add=r.articles.filter(a=>a.fournisseurId===c.fournisseurId&&!dans.has(a.id)&&st[a.id]&&(st[a.id].qte===0||(a.min!==""&&st[a.id].qte<=+a.min)))
-      .map(a=>({articleId:a.id,nom:a.nom,unite:a.cartonnage||a.unite||"",qte:a.cible!==""?Math.max(1,Math.ceil(+a.cible-st[a.id].qte)):1}));
+      .map(a=>({articleId:a.id,nom:a.nom,unite:a.cartonnage||a.unite||"",qte:a.cible!==""&&st[a.id].qte!=null?Math.max(1,Math.ceil(+a.cible-st[a.id].qte)):1}));
     sauver(c.lignes.concat(add),true);toast(add.length+" article"+(add.length>1?"s":"")+" ajouté"+(add.length>1?"s":""))};
   const cq=$("#c-q");if(cq){let t;cq.oninput=e=>{clearTimeout(t);t=setTimeout(()=>{CM.q=e.target.value;pCommandes().then(()=>{const i=$("#c-q");if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}})},300)}}
   const lo=$("#c-libreok");if(lo)lo.onclick=()=>{const n=$("#c-libre").value.trim(),q=$("#c-libreq").value.trim();if(!n||!vraieQte(q)){toast("Nom et quantité",true);return}sauver(c.lignes.concat([{articleId:"",nom:n,unite:"",qte:q}]),true)};

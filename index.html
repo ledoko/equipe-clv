@@ -167,6 +167,7 @@ h2{font-family:var(--display);font-weight:600;font-size:1.1rem;margin:0}
 .inv.low .t .a{color:var(--bad)}
 .inv.vu{background:color-mix(in srgb,var(--ok) 8%,transparent)}
 .inv .okc{color:var(--ok)}
+.inv .t .txt{color:var(--lagoon);font-weight:600}.inv .t .txt:empty{display:none}
 .invdays{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .invday{display:flex;flex-direction:column;gap:8px;text-align:left;border:1.5px solid var(--line);font:inherit;color:inherit}
 .invday.cur{border-color:var(--lagoon)}
@@ -175,7 +176,7 @@ h2{font-family:var(--display);font-weight:600;font-size:1.1rem;margin:0}
 .invday .pct.ok{color:var(--ok)}
 .step{display:flex;align-items:center;border:1.5px solid var(--line);border-radius:12px;overflow:hidden;flex:none;background:var(--bg)}
 .step button{border:0;background:none;width:38px;height:42px;font-size:1.3rem;font-weight:700;color:var(--lagoon)}
-.step input{width:52px;border:0;border-radius:0;padding:8px 2px;text-align:center;background:var(--surface);font-weight:700}
+.step input{width:64px;border:0;border-radius:0;padding:8px 2px;text-align:center;background:var(--surface);font-weight:700}
 .bar{position:fixed;left:0;right:0;bottom:calc(58px + env(safe-area-inset-bottom,0px));z-index:9;display:flex;justify-content:center;padding:0 16px 10px;pointer-events:none}
 .bar .btn{pointer-events:auto;box-shadow:0 6px 20px rgba(10,50,45,.25);width:100%;max-width:528px;padding:14px}
 /* formulaires, panneaux */
@@ -228,7 +229,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-16a";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-16b";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -584,6 +585,8 @@ async function vTaches(){
 // Accueil : vendredi, samedi, dimanche, lundi de la semaine, avec le % compté. Puis la liste du jour, par zone ou par fournisseur.
 const JLONG=["","lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"];
 const invKey=j=>INV_KEY+"-"+j;
+const nb=v=>{const m=/\d+([.,]\d+)?/.exec(String(v==null?"":v));return m?+m[0].replace(",","."):null};
+const estTexte=v=>v!=null&&String(v).trim()!==""&&!/^\s*\d+([.,]\d+)?\s*$/.test(String(v));
 const invDraft=j=>{try{return JSON.parse(localStorage.getItem(invKey(j))||"{}")}catch(e){return{}}};
 const invDuJour=(r,j)=>r.articles.filter(a=>(a.jours||"").split(",").includes(String(wday(j))));
 function invPct(r,j){const L=invDuJour(r,j),c=r.comptes[j]||{},dr=invDraft(j);const n=L.filter(a=>c[a.id]!=null||(dr[a.id]!=null&&dr[a.id]!=="")).length;return{n,tot:L.length,pct:L.length?Math.round(n*100/L.length):0}}
@@ -610,6 +613,7 @@ function invListe(r,jour){
   const peut=j<=t&&diffD(j,t)<=3;
   const base=tout?r.articles:invDuJour(r,j), deja=(tout?{}:r.comptes[j])||{};
   const grp=sub.grp||"zone", q=(sub.q||"").toLowerCase();
+  let clavier="decimal";try{clavier=localStorage.getItem(INV_KEY+"-clavier")||"decimal"}catch(e){}
   const K=invKey(j);
   let draft=invDraft(j);
   const save=()=>{try{localStorage.setItem(K,JSON.stringify(draft));const db=+localStorage.getItem(K+"-debut")||0;if(!db||Date.now()-db>12*3600e3)localStorage.setItem(K+"-debut",String(Date.now()))}catch(e){}};
@@ -622,14 +626,14 @@ function invListe(r,jour){
   const cle=a=>grp==="fournisseur"?a.fournisseur:(a.zone||"Autre");
   const secs=[...new Set(avec.map(cle))].sort((x,y)=>x.localeCompare(y,"fr")).map(k=>[k,avec.filter(a=>cle(a)===k)]);
   if(sans.length)secs.push(["Sans fournisseur",sans,true]);
-  const row=a=>{const v=draft[a.id]==null?"":draft[a.id],low=v!==""&&a.min!==""&&+v<=+a.min,ok=deja[a.id]!=null;
-    const info=[grp==="fournisseur"?a.zone:a.fournisseur,a.cartonnage?"📦 "+a.cartonnage:"",a.unite&&a.unite!==a.cartonnage?a.unite:"",a.cible!==""?"avoir "+a.cible:"",ok?`<b class="okc">✓ compté : ${deja[a.id]}</b>`:a.dernier?`dernier : ${a.dernier.qte} le ${ddmm(a.dernier.date)}`:""].filter(Boolean);
-    return `<div class="inv ${low?"low":""} ${ok&&v===""?"vu":""}" data-a="${esc(a.id)}"><div class="t"><div class="a">${esc(a.nom)}</div><div class="b">${info.map(x=>x.startsWith("<b")?x:esc(x)).join(" · ")}</div></div>
-    ${peut?`<div class="step"><button data-d="-1" aria-label="Moins">−</button><input inputmode="decimal" value="${esc(v)}" placeholder="${ok?esc(deja[a.id]):""}" aria-label="Quantité ${esc(a.nom)}"><button data-d="1" aria-label="Plus">+</button></div>`:""}</div>`};
+  const row=a=>{const v=draft[a.id]==null?"":draft[a.id],n=nb(v),low=n!=null&&a.min!==""&&n<=+a.min,ok=deja[a.id]!=null;
+    const info=[grp==="fournisseur"?a.zone:a.fournisseur,a.cartonnage?"📦 "+a.cartonnage:"",a.unite&&a.unite!==a.cartonnage?a.unite:"",a.cible!==""?"avoir "+a.cible:"",ok?`<b class="okc">✓ compté : ${deja[a.id]}</b>`:a.dernier?`dernier : ${a.dernier.texte||a.dernier.qte} le ${ddmm(a.dernier.date)}`:""].filter(Boolean);
+    return `<div class="inv ${low?"low":""} ${ok&&v===""?"vu":""}" data-a="${esc(a.id)}"><div class="t"><div class="a">${esc(a.nom)}</div><div class="b">${info.map(x=>x.startsWith("<b")?x:esc(x)).join(" · ")}</div><div class="b txt">${estTexte(v)?"✎ "+esc(v):""}</div></div>
+    ${peut?`<div class="step"><button data-d="-1" aria-label="Moins">−</button><input inputmode="${clavier}" maxlength="60" value="${esc(v)}" placeholder="${ok?esc(deja[a.id]):""}" aria-label="Quantité ${esc(a.nom)}"><button data-d="1" aria-label="Plus">+</button></div>`:""}</div>`};
   const p0=fait();
   $("#app").innerHTML=`${header(`<button class="icon" id="iback" aria-label="Retour" style="display:inline-grid;vertical-align:middle;margin-left:-8px">‹</button>${tout?"Tout l'inventaire":"Inventaire du "+JLONG[wday(j)]+" "+ddmm(j)}`,peut?"Compte ce qu'il reste. Laisse vide ce que tu ne comptes pas.":j>t?"Ce jour n'est pas encore arrivé : la liste est là pour voir.":"Ce jour est passé : la liste est là pour voir.")}
   ${tout?"":`<div class="row small" style="margin-bottom:6px"><span class="grow"><b id="ipn">${p0}</b> / ${base.length} comptés</span><b id="ipp">${base.length?Math.round(p0*100/base.length):0} %</b></div><div class="prog" style="margin-bottom:12px"><i id="ipb" style="width:${base.length?Math.round(p0*100/base.length):0}%"></i></div>`}
-  <div class="chips"><button class="chip" data-g="zone" aria-pressed="${grp==="zone"}">Par zone</button><button class="chip" data-g="fournisseur" aria-pressed="${grp==="fournisseur"}">Par fournisseur</button></div>
+  <div class="chips"><button class="chip" data-g="zone" aria-pressed="${grp==="zone"}">Par zone</button><button class="chip" data-g="fournisseur" aria-pressed="${grp==="fournisseur"}">Par fournisseur</button>${peut?`<button class="chip" id="iclav" title="Pour écrire « 2 et 1 entamé », « 3 cartons »…">${clavier==="text"?"⌨️ Clavier : texte":"🔢 Clavier : chiffres"}</button>`:""}</div>
   <input id="iq" type="search" placeholder="Chercher un article, une zone, un fournisseur…" value="${esc(sub.q||"")}">
   <div id="il">${secs.map(([k,L,apart])=>`<section class="sec"><h2 ${apart?'style="color:var(--bad)"':""}>${esc(k)} <span class="muted small">${L.filter(a=>deja[a.id]!=null).length}/${L.length}</span></h2><div class="list">${L.map(row).join("")}</div></section>`).join("")||`<div class="empty">Aucun article</div>`}</div>
   <div style="height:60px"></div>
@@ -640,11 +644,13 @@ function invListe(r,jour){
   $("#app").querySelectorAll("[data-g]").forEach(b=>b.onclick=()=>setSub({grp:b.dataset.g}));
   let qt;$("#iq").oninput=e=>{clearTimeout(qt);qt=setTimeout(()=>{setSub({q:e.target.value});setTimeout(()=>{const i=$("#iq");if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}},50)},450)};
   if(!peut)return;
+  $("#iclav").onclick=()=>{try{localStorage.setItem(INV_KEY+"-clavier",clavier==="text"?"decimal":"text")}catch(e){}go("inventaire")};
   const upd=()=>{$("#ival").textContent=`Valider l'inventaire (${counted()})`;if(!tout&&base.length){const n=fait(),pc=Math.round(n*100/base.length);$("#ipn").textContent=n;$("#ipp").textContent=pc+" %";$("#ipb").style.width=pc+"%"}};
   const il=$("#il");
-  il.addEventListener("click",e=>{const b=e.target.closest("[data-d]");if(!b)return;const row=b.closest("[data-a]"),inp=row.querySelector("input");const v=Math.max(0,(+String(inp.value).replace(",",".")||0)+(+b.dataset.d));inp.value=v;draft[row.dataset.a]=String(v);save();upd();mark(row)});
-  il.addEventListener("input",e=>{const row=e.target.closest("[data-a]");if(!row)return;draft[row.dataset.a]=e.target.value.replace(",",".");save();upd();mark(row)});
-  function mark(row){const a=r.articles.find(x=>x.id===row.dataset.a),v=draft[a.id];row.classList.toggle("low",v!==""&&v!=null&&a.min!==""&&+v<=+a.min)}
+  il.addEventListener("click",e=>{const b=e.target.closest("[data-d]");if(!b)return;const row=b.closest("[data-a]"),inp=row.querySelector("input");const cur=String(inp.value),n=nb(cur);
+    const v=n==null?String(Math.max(0,+b.dataset.d)):cur.replace(/\d+([.,]\d+)?/,String(Math.max(0,Math.round((n+(+b.dataset.d))*100)/100)));inp.value=v;draft[row.dataset.a]=v;save();upd();mark(row)});
+  il.addEventListener("input",e=>{const row=e.target.closest("[data-a]");if(!row)return;draft[row.dataset.a]=e.target.value;save();upd();mark(row)});
+  function mark(row){const a=r.articles.find(x=>x.id===row.dataset.a),v=draft[a.id],n=nb(v);row.classList.toggle("low",n!=null&&a.min!==""&&n<=+a.min);const t=row.querySelector(".txt");if(t)t.textContent=estTexte(v)?"✎ "+v:""}
   $("#ival").onclick=()=>{
     const lignes=Object.keys(draft).filter(k=>draft[k]!==""&&draft[k]!=null).map(k=>({articleId:k,qte:draft[k]}));
     if(!lignes.length){toast("Compte au moins un article",true);return}
