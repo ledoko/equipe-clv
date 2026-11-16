@@ -229,7 +229,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-16b";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-16c";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -582,6 +582,10 @@ async function vTaches(){
 }
 
 // ---------- inventaire ----------
+// Entrée dans une liste de saisie = passer à la ligne suivante (la dernière ferme le clavier)
+function entreeSuivante(box,sel){if(!box)return;box.addEventListener("keydown",e=>{if(e.key!=="Enter"||!e.target.matches(sel))return;e.preventDefault();
+  const L=[...box.querySelectorAll(sel)].filter(x=>x.offsetParent!==null),i=L.indexOf(e.target),n=L[i+1];
+  if(n){n.focus();try{n.select()}catch(_){}n.scrollIntoView({block:"center",behavior:"smooth"})}else e.target.blur()})}
 // Accueil : vendredi, samedi, dimanche, lundi de la semaine, avec le % compté. Puis la liste du jour, par zone ou par fournisseur.
 const JLONG=["","lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"];
 const invKey=j=>INV_KEY+"-"+j;
@@ -629,7 +633,7 @@ function invListe(r,jour){
   const row=a=>{const v=draft[a.id]==null?"":draft[a.id],n=nb(v),low=n!=null&&a.min!==""&&n<=+a.min,ok=deja[a.id]!=null;
     const info=[grp==="fournisseur"?a.zone:a.fournisseur,a.cartonnage?"📦 "+a.cartonnage:"",a.unite&&a.unite!==a.cartonnage?a.unite:"",a.cible!==""?"avoir "+a.cible:"",ok?`<b class="okc">✓ compté : ${deja[a.id]}</b>`:a.dernier?`dernier : ${a.dernier.texte||a.dernier.qte} le ${ddmm(a.dernier.date)}`:""].filter(Boolean);
     return `<div class="inv ${low?"low":""} ${ok&&v===""?"vu":""}" data-a="${esc(a.id)}"><div class="t"><div class="a">${esc(a.nom)}</div><div class="b">${info.map(x=>x.startsWith("<b")?x:esc(x)).join(" · ")}</div><div class="b txt">${estTexte(v)?"✎ "+esc(v):""}</div></div>
-    ${peut?`<div class="step"><button data-d="-1" aria-label="Moins">−</button><input inputmode="${clavier}" maxlength="60" value="${esc(v)}" placeholder="${ok?esc(deja[a.id]):""}" aria-label="Quantité ${esc(a.nom)}"><button data-d="1" aria-label="Plus">+</button></div>`:""}</div>`};
+    ${peut?`<div class="step"><button data-d="-1" aria-label="Moins">−</button><input inputmode="${clavier}" enterkeyhint="next" maxlength="60" value="${esc(v)}" placeholder="${ok?esc(deja[a.id]):""}" aria-label="Quantité ${esc(a.nom)}"><button data-d="1" aria-label="Plus">+</button></div>`:""}</div>`};
   const p0=fait();
   $("#app").innerHTML=`${header(`<button class="icon" id="iback" aria-label="Retour" style="display:inline-grid;vertical-align:middle;margin-left:-8px">‹</button>${tout?"Tout l'inventaire":"Inventaire du "+JLONG[wday(j)]+" "+ddmm(j)}`,peut?"Compte ce qu'il reste. Laisse vide ce que tu ne comptes pas.":j>t?"Ce jour n'est pas encore arrivé : la liste est là pour voir.":"Ce jour est passé : la liste est là pour voir.")}
   ${tout?"":`<div class="row small" style="margin-bottom:6px"><span class="grow"><b id="ipn">${p0}</b> / ${base.length} comptés</span><b id="ipp">${base.length?Math.round(p0*100/base.length):0} %</b></div><div class="prog" style="margin-bottom:12px"><i id="ipb" style="width:${base.length?Math.round(p0*100/base.length):0}%"></i></div>`}
@@ -647,6 +651,7 @@ function invListe(r,jour){
   $("#iclav").onclick=()=>{try{localStorage.setItem(INV_KEY+"-clavier",clavier==="text"?"decimal":"text")}catch(e){}go("inventaire")};
   const upd=()=>{$("#ival").textContent=`Valider l'inventaire (${counted()})`;if(!tout&&base.length){const n=fait(),pc=Math.round(n*100/base.length);$("#ipn").textContent=n;$("#ipp").textContent=pc+" %";$("#ipb").style.width=pc+"%"}};
   const il=$("#il");
+  entreeSuivante(il,".step input");
   il.addEventListener("click",e=>{const b=e.target.closest("[data-d]");if(!b)return;const row=b.closest("[data-a]"),inp=row.querySelector("input");const cur=String(inp.value),n=nb(cur);
     const v=n==null?String(Math.max(0,+b.dataset.d)):cur.replace(/\d+([.,]\d+)?/,String(Math.max(0,Math.round((n+(+b.dataset.d))*100)/100)));inp.value=v;draft[row.dataset.a]=v;save();upd();mark(row)});
   il.addEventListener("input",e=>{const row=e.target.closest("[data-a]");if(!row)return;draft[row.dataset.a]=e.target.value;save();upd();mark(row)});
@@ -1088,10 +1093,11 @@ async function comptageSheet(tache){
   const vals={};
   const grp=(type,titre)=>{const it=r.items.filter(i=>i.type===type);if(!it.length)return"";
     return `<div class="grp">${titre}</div>`+it.map(i=>`<div class="inv" data-c="${esc(i.id)}"><div class="t"><div class="a">${esc(i.nom)}</div><div class="b">objectif ${i.cible}${i.weekend?" (week-end)":""}${i.aRemplir?` · déjà ${i.aRemplir} à remplir`:""}</div></div>
-    <div class="step"><button data-d="-1" aria-label="Moins">−</button><input inputmode="numeric" value="" placeholder="?" aria-label="Nombre ${esc(i.nom)}"><button data-d="1" aria-label="Plus">+</button></div></div>`).join("")};
+    <div class="step"><button data-d="-1" aria-label="Moins">−</button><input inputmode="numeric" enterkeyhint="next" value="" placeholder="?" aria-label="Nombre ${esc(i.nom)}"><button data-d="1" aria-label="Plus">+</button></div></div>`).join("")};
   open(`<h3>Compter les pipettes et les condiments</h3><p class="hint">Note combien il en reste de chaque. Ce qui manque devient une tâche « Remplir » qui reste jusqu'à ce qu'elle soit faite.</p>
   <div class="list" id="cl">${grp("pipette","Sauces (pipettes)")}${grp("pot","Condiments (pots)")}</div>
   <div class="actions"><button class="btn ghost" id="c-no">Annuler</button><button class="btn" id="c-ok">Valider (0)</button></div>`,()=>{
+    entreeSuivante($("#cl"),".step input");
     const cl=$("#cl"),upd=()=>{$("#c-ok").textContent=`Valider (${Object.keys(vals).filter(k=>vals[k]!=="").length})`};
     const mark=row=>{const i=r.items.find(x=>x.id===row.dataset.c),v=vals[i.id];row.classList.toggle("low",v!==""&&v!=null&&+v<i.cible)};
     cl.addEventListener("click",e=>{const b=e.target.closest("[data-d]");if(!b)return;const row=b.closest("[data-c]"),inp=row.querySelector("input");const v=Math.max(0,(parseInt(inp.value)||0)+(+b.dataset.d));inp.value=v;vals[row.dataset.c]=String(v);upd();mark(row)});

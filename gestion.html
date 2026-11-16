@@ -596,6 +596,10 @@ async function pRemplissage(){
 }
 
 // =====================================================================================  COMMANDES
+// Entrée dans une liste de saisie = passer à la ligne suivante (la dernière ferme le clavier)
+function entreeSuivante(box,sel){if(!box)return;box.addEventListener("keydown",e=>{if(e.key!=="Enter"||!e.target.matches(sel))return;e.preventDefault();
+  const L=[...box.querySelectorAll(sel)].filter(x=>x.offsetParent!==null),i=L.indexOf(e.target),n=L[i+1];
+  if(n){n.focus();try{n.select()}catch(_){}n.scrollIntoView({block:"center",behavior:"smooth"})}else e.target.blur()})}
 const CM={sel:"",q:""};
 const vraieQte=q=>{q=String(q==null?"":q).trim();return q!==""&&!/^0+([.,]0+)?$/.test(q)};
 async function pCommandes(garder){
@@ -687,6 +691,7 @@ async function pCommandes(garder){
     });
   };
   const cl=$("#cl");
+  entreeSuivante(cl,"input[data-f=qte]");entreeSuivante($("#ca"),"input");
   if(cl&&c.statut==="a_passer"){
     cl.addEventListener("change",e=>{const tr=e.target.closest("tr[data-i]"),k=e.target.dataset.f;if(!tr||!k)return;const L=c.lignes.map(l=>Object.assign({},l));L[+tr.dataset.i][k]=e.target.value.trim();sauver(L,k==="qte"&&!vraieQte(e.target.value))});
     cl.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{const L=c.lignes.filter((l,i)=>i!==+b.dataset.del);sauver(L,true)});
