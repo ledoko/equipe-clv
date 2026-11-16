@@ -604,11 +604,11 @@ function mailCommande(c,f,art,livr){
   // Mot de l'unité : celui de la ligne s'il est connu, sinon le cartonnage de l'article (« 3 Unités », « 2 Cartons », « 1,5 kg »)
   const UN={carton:"Carton",paquet:"Paquet",pack:"Pack",balle:"Balle",sac:"Sac",poche:"Poche",unite:"Unité",unit:"Unité",kg:"kg",sachet:"Sachet",boite:"Boîte",bouteille:"Bouteille",bidon:"Bidon",filet:"Filet",seau:"Seau",bloc:"Bloc"};
   const cle=u=>String(u||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().replace(/s$/,"");
-  const motU=(l,a)=>UN[cle(l.unite)]||UN[cle(a.cartonnage)]||"";
+  const motU=(l,a)=>cle(l.unite)==="unite"||cle(l.unite)==="unit"?"":UN[cle(l.unite)]||""; // pas d'unité sur la ligne = rien (juste le chiffre)
   const n=q=>{const m=/\d+([.,]\d+)?/.exec(String(q));return m?+m[0].replace(",","."):0};
   const L=c.lignes.map(l=>{const a=(art&&art[l.articleId])||{},nom=a.ref||l.nom,q=String(l.qte).trim();
     let qq=q;if(/^\d+([.,]\d+)?$/.test(q)){const lu=String(l.unite||"").trim(),u=motU(l,a);
-      if(lu&&!UN[cle(lu)])qq=`${q} ${lu}`; // unité tapée sur la ligne (« x 1kg ») : reprise telle quelle
+      if(lu&&!UN[cle(lu)]&&!/^unit/i.test(lu))qq=`${q} ${lu}`; // unité tapée sur la ligne (« x 1kg ») : reprise telle quelle
       else if(u)qq=`${q} ${u}${u!=="kg"&&n(q)>1?"s":""}`}
     return {k:n(q),u:qq===q&&/^\d+([.,]\d+)?$/.test(q)?0:1,t:`${qq}    ${nom}`}}).sort((a,b)=>a.k-b.k||a.u-b.u||a.t.localeCompare(b.t,"fr"));
   const lignes=L.map(x=>x.t).join("\n");
@@ -722,10 +722,10 @@ async function pCommandes(garder){
   }
   const ca=$("#ca");
   if(ca)ca.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>{const a=art[b.dataset.add],q=b.parentNode.querySelector("input").value.trim();if(!vraieQte(q)){toast("Quantité ?",true);return}
-    sauver(c.lignes.concat([{articleId:a.id,nom:a.nom,unite:a.cartonnage||a.unite||"",qte:q}]),true)});
+    sauver(c.lignes.concat([{articleId:a.id,nom:a.nom,unite:"",qte:q}]),true)});
   const cb=$("#c-bas");if(cb)cb.onclick=()=>{const dans=new Set(c.lignes.map(l=>l.articleId));
     const add=r.articles.filter(a=>a.fournisseurId===c.fournisseurId&&!dans.has(a.id)&&st[a.id]&&(st[a.id].qte===0||(a.min!==""&&st[a.id].qte<=+a.min)))
-      .map(a=>({articleId:a.id,nom:a.nom,unite:a.cartonnage||a.unite||"",qte:a.cible!==""&&st[a.id].qte!=null?Math.max(1,Math.ceil(+a.cible-st[a.id].qte)):1}));
+      .map(a=>({articleId:a.id,nom:a.nom,unite:"",qte:a.cible!==""&&st[a.id].qte!=null?Math.max(1,Math.ceil(+a.cible-st[a.id].qte)):1}));
     sauver(c.lignes.concat(add),true);toast(add.length+" article"+(add.length>1?"s":"")+" ajouté"+(add.length>1?"s":""))};
   const cq=$("#c-q");if(cq){let t;cq.oninput=e=>{clearTimeout(t);t=setTimeout(()=>{CM.q=e.target.value;pCommandes().then(()=>{const i=$("#c-q");if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}})},300)}}
   const lo=$("#c-libreok");if(lo)lo.onclick=()=>{const n=$("#c-libre").value.trim(),q=$("#c-libreq").value.trim();if(!n||!vraieQte(q)){toast("Nom et quantité",true);return}sauver(c.lignes.concat([{articleId:"",nom:n,unite:"",qte:q}]),true)};

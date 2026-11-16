@@ -229,7 +229,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-16f";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-16g";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -750,11 +750,11 @@ function mailCommande(c,f,art,livr){
   // Mot de l'unité : celui de la ligne s'il est connu, sinon le cartonnage de l'article (« 3 Unités », « 2 Cartons », « 1,5 kg »)
   const UN={carton:"Carton",paquet:"Paquet",pack:"Pack",balle:"Balle",sac:"Sac",poche:"Poche",unite:"Unité",unit:"Unité",kg:"kg",sachet:"Sachet",boite:"Boîte",bouteille:"Bouteille",bidon:"Bidon",filet:"Filet",seau:"Seau",bloc:"Bloc"};
   const cle=u=>String(u||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().replace(/s$/,"");
-  const motU=(l,a)=>UN[cle(l.unite)]||UN[cle(a.cartonnage)]||"";
+  const motU=(l,a)=>cle(l.unite)==="unite"||cle(l.unite)==="unit"?"":UN[cle(l.unite)]||""; // pas d'unité sur la ligne = rien (juste le chiffre)
   const n=q=>{const m=/\d+([.,]\d+)?/.exec(String(q));return m?+m[0].replace(",","."):0};
   const L=c.lignes.map(l=>{const a=(art&&art[l.articleId])||{},nom=a.ref||l.nom,q=String(l.qte).trim();
     let qq=q;if(/^\d+([.,]\d+)?$/.test(q)){const lu=String(l.unite||"").trim(),u=motU(l,a);
-      if(lu&&!UN[cle(lu)])qq=`${q} ${lu}`; // unité tapée sur la ligne (« x 1kg ») : reprise telle quelle
+      if(lu&&!UN[cle(lu)]&&!/^unit/i.test(lu))qq=`${q} ${lu}`; // unité tapée sur la ligne (« x 1kg ») : reprise telle quelle
       else if(u)qq=`${q} ${u}${u!=="kg"&&n(q)>1?"s":""}`}
     return {k:n(q),u:qq===q&&/^\d+([.,]\d+)?$/.test(q)?0:1,t:`${qq}    ${nom}`}}).sort((a,b)=>a.k-b.k||a.u-b.u||a.t.localeCompare(b.t,"fr"));
   const lignes=L.map(x=>x.t).join("\n");
@@ -807,7 +807,7 @@ async function gCommandes(){
       <div class="actions"><button class="btn bad" id="c-del">Supprimer</button><button class="btn" id="c-ok">Enregistrer</button></div>`,()=>{
         $("#sheet").querySelectorAll("[data-q]").forEach(i=>i.oninput=()=>{lignes[+i.dataset.q].qte=i.value});
         $("#sheet").querySelectorAll("[data-rm]").forEach(b=>b.onclick=()=>{lignes.splice(+b.dataset.rm,1);draw()});
-        $("#c-add").onchange=e=>{const v=e.target.value;if(v==="__libre"){$("#c-libre").hidden=false;$("#c-libre").focus();return}const a=arts.find(x=>x.id===v);if(a){lignes.push({articleId:a.id,nom:a.nom,unite:a.unite,qte:a.cible||1});draw()}};
+        $("#c-add").onchange=e=>{const v=e.target.value;if(v==="__libre"){$("#c-libre").hidden=false;$("#c-libre").focus();return}const a=arts.find(x=>x.id===v);if(a){lignes.push({articleId:a.id,nom:a.nom,unite:"",qte:a.cible||1});draw()}};
         $("#c-libre").onkeydown=e=>{if(e.key==="Enter"&&e.target.value.trim()){lignes.push({articleId:"",nom:e.target.value.trim(),qte:1});draw()}};
         $("#c-del").onclick=()=>confirmSheet("Supprimer cette commande ?","","Supprimer",async()=>{await act(()=>call("commandeSupprimer",{id:c.id}),"Supprimée");go("gerer",{page:"commandes"})});
         $("#c-ok").onclick=async()=>{const lib=$("#c-libre");if(lib&&!lib.hidden&&lib.value.trim())lignes.push({articleId:"",nom:lib.value.trim(),qte:1});await act(()=>call("commandeSave",{id:c.id,lignes}),"Enregistré");go("gerer",{page:"commandes"})};
