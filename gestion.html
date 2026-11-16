@@ -39,7 +39,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--lagoon);outline-
 .muted{color:var(--muted)} .small{font-size:.85rem}
 .row{display:flex;gap:10px;align-items:center} .grow{flex:1;min-width:0} .wrap{flex-wrap:wrap}
 .pill{display:inline-block;border-radius:99px;padding:1px 8px;font-size:.75rem;font-weight:600;background:var(--soft);color:var(--muted)}
-.cmdgrid{display:grid;grid-template-columns:280px minmax(0,1fr);gap:16px;align-items:start}@media (max-width:1100px){.cmdgrid{grid-template-columns:1fr}}
+.cmdgrid{display:grid;grid-template-columns:240px minmax(0,1fr);gap:16px;align-items:start}.cmdright{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
+.cmdright>.card:only-child{grid-column:1/-1}@media (max-width:1200px){.cmdright{grid-template-columns:1fr}}@media (max-width:1000px){.cmdgrid{grid-template-columns:1fr}}
 .cmdc{display:block;width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer}.cmdc.sel{border-color:var(--lagoon);box-shadow:0 0 0 2px var(--lagoon-soft)}
 table.t tr.low td:first-child{color:var(--bad);font-weight:600}
 .pill.ok{background:var(--ok-soft);color:var(--ok)} .pill.warn{background:var(--warn-soft);color:var(--warn)} .pill.info{background:var(--lagoon-soft);color:var(--lagoon)}
@@ -622,7 +623,7 @@ async function pCommandes(){
     droite=`<div class="card">
       <div class="row" style="gap:10px;align-items:center"><h2 class="grow" style="margin:0">${esc(f.nom)}</h2><span class="pill ${(ST[c.statut]||[""])[0]}">${(ST[c.statut]||["",c.statut])[1]}</span></div>
       <p class="muted small" style="margin:6px 0 12px">${f.jourCommande?"⏰ Commander "+esc(f.jourCommande)+" · ":""}${f.email?"✉️ "+esc(f.email):f.telephone?"📞 "+esc(f.telephone):"Pas d'email ni de numéro : à remplir dans Fournisseurs"}</p>
-      <div class="scrollx"><table class="t" style="min-width:560px"><colgroup><col><col style="width:150px"><col style="width:100px"><col style="width:140px"><col style="width:46px"></colgroup>
+      <div class="scrollx"><table class="t" style="min-width:440px"><colgroup><col><col style="width:120px"><col style="width:80px"><col style="width:100px"><col style="width:40px"></colgroup>
       <thead><tr><th>Article</th><th>Quantité</th><th>Unité</th><th>Dernier stock</th><th></th></tr></thead><tbody id="cl">
       ${c.lignes.map((l,i)=>`<tr data-i="${i}"><td>${esc(l.nom)}${l.articleId&&art[l.articleId]&&art[l.articleId].ref?`<div class="small muted">${esc(art[l.articleId].ref)}</div>`:""}</td>
         <td>${edit?`<input data-f="qte" value="${esc(l.qte)}" placeholder="ex. 2 cartons" maxlength="40">`:esc(l.qte)}</td>
@@ -635,12 +636,12 @@ async function pCommandes(){
         :c.statut==="envoyee"?`<button class="btn" id="c-rec">Marquer reçue</button><button class="btn ghost" id="c-copy">Copier le texte</button><button class="btn ghost" id="c-back">Remettre « à passer »</button>`
         :`<button class="btn ghost" id="c-copy">Copier le texte</button>`}
       </div></div>
-    ${edit?`<div class="card" style="margin-top:16px"><div class="row" style="gap:10px;align-items:center"><h3 class="grow" style="margin:0">Ajouter des articles ${esc(f.nom)}</h3>${dispo.some(bas)?`<button class="btn sun" id="c-bas">+ Tout le stock bas (${dispo.filter(bas).length})</button>`:""}<input id="c-q" placeholder="🔍 Chercher…" value="${esc(CM.q)}" style="width:220px"></div>
+    ${edit?`<div class="card"><div class="row wrap" style="gap:10px;align-items:center"><h3 class="grow" style="margin:0">Ajouter des articles ${esc(f.nom)}</h3>${dispo.some(bas)?`<button class="btn sun" id="c-bas">+ Tout le stock bas (${dispo.filter(bas).length})</button>`:""}<input id="c-q" placeholder="🔍 Chercher…" value="${esc(CM.q)}" style="width:180px"></div>
       <p class="muted small">Triés du stock le plus bas au plus haut (dernier inventaire). En rouge : à 0, ou au mini et en dessous (sans mini réglé : seulement à 0). La quantité peut être un nombre ou du texte : « 2 cartons », « 1 pack ».</p>
-      <div style="max-height:460px;overflow:auto"><table class="t" style="min-width:640px"><colgroup><col><col style="width:150px"><col style="width:150px"><col style="width:110px"><col style="width:150px"></colgroup>
+      <div style="max-height:calc(100vh - 290px);min-height:300px;overflow:auto"><table class="t" style="min-width:460px"><colgroup><col><col style="width:96px"><col style="width:100px"><col style="width:70px"><col style="width:120px"></colgroup>
       <thead><tr><th>Article</th><th>Zone</th><th>Dernier stock</th><th>Mini / cible</th><th></th></tr></thead><tbody id="ca">
       ${dispo.map(a=>`<tr data-a="${esc(a.id)}" class="${bas(a)?"low":""}"><td>${esc(a.nom)}${a.ref?`<div class="small muted">${esc(a.ref)}</div>`:""}</td><td class="small">${esc(a.zone)}</td><td>${stockTxt(a.id)}</td><td class="small">${esc(a.min||"–")} / ${esc(a.cible||"–")}</td>
-        <td><div class="row" style="gap:4px"><input value="${esc(a.cible!==""&&st[a.id]?Math.max(1,Math.ceil(+a.cible-st[a.id].qte)):1)}" maxlength="40" style="width:90px" title="Un nombre ou du texte : 2 cartons, 1 pack…"><button class="btn small" data-add="${esc(a.id)}">+</button></div></td></tr>`).join("")||`<tr><td colspan="5" class="muted">Aucun autre article de ce fournisseur.</td></tr>`}
+        <td><div class="row" style="gap:4px"><input value="${esc(a.cible!==""&&st[a.id]?Math.max(1,Math.ceil(+a.cible-st[a.id].qte)):1)}" maxlength="40" style="width:76px" title="Un nombre ou du texte : 2 cartons, 1 pack…"><button class="btn small" data-add="${esc(a.id)}">+</button></div></td></tr>`).join("")||`<tr><td colspan="5" class="muted">Aucun autre article de ce fournisseur.</td></tr>`}
       </tbody></table></div>
       <div class="row" style="gap:8px;margin-top:10px"><input id="c-libre" placeholder="Autre chose (hors liste)…" style="flex:1"><input id="c-libreq" value="1" maxlength="40" style="width:120px" placeholder="ex. 1 carton"><button class="btn ghost" id="c-libreok">Ajouter</button></div></div>`:""}`;
   }
@@ -649,7 +650,7 @@ async function pCommandes(){
   <div class="cmdgrid">
     <div style="display:flex;flex-direction:column;gap:8px">${cmds.map(carte).join("")||`<p class="muted small">Les commandes se créent quand un inventaire trouve un article sous son mini, ou avec « + Nouvelle commande ».</p>`}
       <p class="muted small">Les commandes reçues restent affichées 14 jours.</p></div>
-    <div>${droite}</div>
+    <div class="cmdright">${droite}</div>
   </div>`;
   $("#main").querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>{CM.sel=b.dataset.c;CM.q="";pCommandes()});
   $("#n-ok").onclick=async()=>{const fid=$("#n-f").value;if(!fid){toast("Choisis un fournisseur",true);return}
