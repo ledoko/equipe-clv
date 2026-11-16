@@ -607,7 +607,9 @@ function mailCommande(c,f,art,livr){
   const motU=(l,a)=>UN[cle(l.unite)]||UN[cle(a.cartonnage)]||"";
   const n=q=>{const m=/\d+([.,]\d+)?/.exec(String(q));return m?+m[0].replace(",","."):0};
   const L=c.lignes.map(l=>{const a=(art&&art[l.articleId])||{},nom=a.ref||l.nom,q=String(l.qte).trim();
-    let qq=q;if(/^\d+([.,]\d+)?$/.test(q)){const u=motU(l,a);if(u)qq=`${q} ${u}${u!=="kg"&&n(q)>1?"s":""}`}
+    let qq=q;if(/^\d+([.,]\d+)?$/.test(q)){const lu=String(l.unite||"").trim(),u=motU(l,a);
+      if(lu&&!UN[cle(lu)])qq=`${q} ${lu}`; // unité tapée sur la ligne (« x 1kg ») : reprise telle quelle
+      else if(u)qq=`${q} ${u}${u!=="kg"&&n(q)>1?"s":""}`}
     return {k:n(q),u:qq===q&&/^\d+([.,]\d+)?$/.test(q)?0:1,t:`${qq}    ${nom}`}}).sort((a,b)=>a.k-b.k||a.u-b.u||a.t.localeCompare(b.t,"fr"));
   const lignes=L.map(x=>x.t).join("\n");
   return {lignes:L.map(x=>x.t.split("    ")[0]).join("\n"),sujet:`Sunshine Coffee - Commande pour livraison le ${jj}`,
