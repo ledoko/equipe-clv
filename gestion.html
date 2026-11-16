@@ -601,13 +601,16 @@ async function pRemplissage(){
 function livraisonDefaut(){const d=new Date(Date.now()+864e5);if(d.getDay()===0)d.setDate(d.getDate()+1);return d.toISOString().slice(0,10)}
 function mailCommande(c,f,art,livr){
   const jj=String(livr||livraisonDefaut()).slice(8,10)+"/"+String(livr||livraisonDefaut()).slice(5,7);
-  const UN={carton:"Carton",paquet:"Paquet",pack:"Pack",balle:"Balle",sac:"Sac",poche:"Poche"};
+  // Mot de l'unité : celui de la ligne s'il est connu, sinon le cartonnage de l'article (« 3 Unités », « 2 Cartons », « 1,5 kg »)
+  const UN={carton:"Carton",paquet:"Paquet",pack:"Pack",balle:"Balle",sac:"Sac",poche:"Poche",unite:"Unité",unit:"Unité",kg:"kg",sachet:"Sachet",boite:"Boîte",bouteille:"Bouteille",bidon:"Bidon",filet:"Filet",seau:"Seau",bloc:"Bloc"};
+  const cle=u=>String(u||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().replace(/s$/,"");
+  const motU=(l,a)=>UN[cle(l.unite)]||UN[cle(a.cartonnage)]||"";
   const n=q=>{const m=/\d+([.,]\d+)?/.exec(String(q));return m?+m[0].replace(",","."):0};
   const L=c.lignes.map(l=>{const a=(art&&art[l.articleId])||{},nom=a.ref||l.nom,q=String(l.qte).trim();
-    let qq=q;if(/^\d+([.,]\d+)?$/.test(q)){const u=UN[String(l.unite||"").toLowerCase()];if(u)qq=`${q} ${u}${+q>1?"s":""}`}
+    let qq=q;if(/^\d+([.,]\d+)?$/.test(q)){const u=motU(l,a);if(u)qq=`${q} ${u}${u!=="kg"&&n(q)>1?"s":""}`}
     return {k:n(q),u:qq===q&&/^\d+([.,]\d+)?$/.test(q)?0:1,t:`${qq}    ${nom}`}}).sort((a,b)=>a.k-b.k||a.u-b.u||a.t.localeCompare(b.t,"fr"));
   const lignes=L.map(x=>x.t).join("\n");
-  return {sujet:`Sunshine Coffee - Commande pour livraison le ${jj}`,
+  return {lignes:L.map(x=>x.t.split("    ")[0]).join("\n"),sujet:`Sunshine Coffee - Commande pour livraison le ${jj}`,
     corps:`Bonjour${f.contact?" "+f.contact:""},\n\nUne commande pour livraison le ${jj}:\n\n${lignes}\n\nEn te remerciant,\n\nCordialement,\n`,
     court:`Bonjour${f.contact?" "+f.contact:""}, c'est David du Café La Victoria. Une commande pour livraison le ${jj} :\n${lignes}\nMerci !`};
 }
@@ -683,7 +686,7 @@ async function pCommandes(garder){
   const ok=()=>{const s=$("#saved");if(s){s.textContent="✓ Enregistré";setTimeout(()=>{if($("#saved"))$("#saved").textContent=""},1500)}};
   const sauver=async(lignes,recharger)=>{try{await call("commandeSave",{id:c.id,lignes});c.lignes=lignes.filter(l=>vraieQte(l.qte));ok();if(recharger)pCommandes(true)}catch(e){toast(e.message,true);pCommandes(true)}};
   // texte pour le fournisseur : nom catalogue (réf.) quand on l'a
-  const ligneTxt=l=>{const a=art[l.articleId]||{};const u=l.unite&&!/^unit/i.test(l.unite)&&/^[\d.,\s]+$/.test(String(l.qte))?" "+l.unite:"";return `- ${a.ref||l.nom} : ${l.qte}${u}`};
+  const ligneTxt=l=>{const a=art[l.articleId]||{};return `- ${a.ref||l.nom} : ${mailCommande({lignes:[l]},{},art).lignes}`};
   const txt=()=>c.lignes.map(ligneTxt).join("\n");
   const corps=livr=>mailCommande(c,f,art,livr).corps;
   const copier=async t=>{try{await navigator.clipboard.writeText(t);toast("Copié")}catch(e){toast("Copie impossible",true)}};
