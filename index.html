@@ -167,6 +167,7 @@ h2{font-family:var(--display);font-weight:600;font-size:1.1rem;margin:0}
 .inv.low .t .a{color:var(--bad)}
 .inv.vu{background:color-mix(in srgb,var(--ok) 8%,transparent)}
 .inv .okc{color:var(--ok)}
+.recbtn{cursor:pointer}.recette .ing{padding:6px 0;border-bottom:1px solid var(--line)}.recette .ing b{display:inline-block;min-width:92px}.recette .ing.ref b{color:var(--lagoon)}.recette .rnote{padding:8px 0 2px;color:var(--muted);font-size:.9em}
 .inv .t .txt{color:var(--lagoon);font-weight:600}.inv .t .txt:empty{display:none}
 .invdays{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .invday{display:flex;flex-direction:column;gap:8px;text-align:left;border:1.5px solid var(--line);font:inherit;color:inherit}
@@ -229,7 +230,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-17b";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-18a";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -551,7 +552,7 @@ async function vTaches(){
     const badge=x.freq==="semaine"?`<span class="pill info">Hebdo</span>`:x.freq==="mois"?`<span class="pill info">Mensuel</span>`:"";
     const late=x.retard&&!x.fait?`<span class="pill no">Prévu ${jourCourt(x.echeance)}</span>`:"";
     const who=`<span class="who2">${x.fait?`✓ Fait par ${esc(x.fait.par)} à ${x.fait.le.slice(11,16)}`:""}</span>`;
-    const meta=[badge,late,x.type==="comptage"&&!x.fait?`<span class="pill info">📋 Ouvre le comptage</span>`:"",x.qui?`<span>· ${esc(x.qui)}</span>`:"",who].filter(Boolean).join("");
+    const meta=[badge,late,String(x.type).startsWith("comptage")&&!x.fait?`<span class="pill info">📋 Ouvre le comptage</span>`:"",x.recette?`<span class="pill info recbtn" data-rec="${esc(x.id)}" role="button">📖 Recette</span>`:"",x.qui?`<span>· ${esc(x.qui)}</span>`:"",who].filter(Boolean).join("");
     html+=`<button class="task ${x.fait?"done":""}" data-t="${esc(x.id)}" ${d>today()?"disabled":""}><span class="box">${x.fait?"✓":""}</span><span class="grow"><div class="tt">${esc(x.titre)}</div>${x.note?`<div class="nn">${esc(x.note)}</div>`:""}<div class="meta">${meta}</div></span></button>`;
   });
   $("#app").innerHTML=`${header("Tâches")}
@@ -559,20 +560,21 @@ async function vTaches(){
   <div class="card"><div class="sechead"><h2>${f} / ${n} faites</h2><label class="small muted row" style="gap:6px"><input type="checkbox" id="cacher" style="width:auto" ${cacher?"checked":""}> Cacher les faites</label></div><div class="prog"><i style="width:${n?f/n*100:0}%"></i></div></div>
   <div class="chips"><button class="chip" data-f="tout" aria-pressed="${filtre==="tout"}">Tout</button>${moments.map(m=>`<button class="chip" data-f="${esc(m)}" aria-pressed="${filtre===m}">${esc(m)}</button>`).join("")}</div>
   <div class="list" id="tl">${html||`<div class="empty">${cacher&&n?"Tout est fait 🎉":"Aucune tâche"}</div>`}</div>
-  ${d===today()?`<button class="btn ghost" id="compter" style="margin-bottom:8px">🧴 Compter les sauces et les condiments</button>`:""}
+  ${d===today()?`<button class="btn ghost" id="compter" style="margin-bottom:8px">📋 Compter (sauces, mise en place)</button>`:""}
   <button class="btn ghost" id="sugg">💡 Suggérer une tâche</button>`;
   bindOut();
   $("#sugg").onclick=()=>suggestionSheet(filtre!=="tout"?filtre:"");
-  const cpt=$("#compter");if(cpt)cpt.onclick=()=>comptageSheet(null);
+  const cpt=$("#compter");if(cpt)cpt.onclick=()=>choixComptage();
   const setSub=o=>{sub=Object.assign({date:d,filtre,cacher},o);go("taches")};
   $("#dprev").onclick=()=>setSub({date:addDays(d,-1)});
   $("#dnext").onclick=()=>{if(d<today())setSub({date:addDays(d,1)})};
   $("#cacher").onchange=e=>setSub({cacher:e.target.checked});
   $("#app").querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>setSub({filtre:b.dataset.f}));
   $("#tl").addEventListener("click",async e=>{
+    const rb=e.target.closest("[data-rec]");if(rb){e.stopPropagation();recetteSheet(list.find(y=>y.id===rb.dataset.rec));return}
     const b=e.target.closest("[data-t]");if(!b||b.disabled)return;
     const x=list.find(y=>y.id===b.dataset.t), fait=!x.fait;
-    if(x.type==="comptage"&&fait&&d===today()){comptageSheet(x);return}
+    if(String(x.type).startsWith("comptage")&&fait&&d===today()){comptageSheet(x);return}
     const w=b.querySelector(".who2");
     x.fait=fait?{par:S.me.prenom,le:"0000-00-00 "+heureLocale()}:null;
     b.classList.toggle("done",fait);b.querySelector(".box").textContent=fait?"✓":"";
@@ -1110,14 +1112,45 @@ function absenceSheet(s){
   });
 }
 // ---------- comptage des pipettes de sauce et des pots de condiments -> tâches « Remplir … »
-async function comptageSheet(tache){
-  let r;try{r=await call("remplissage")}catch(e){toast(e.message,true);return}
-  if(!r.items.length){toast("Aucune sauce ni condiment à compter : la liste se règle sur l'écran de gestion",true);return}
+// ---------- recette d'une tâche « Remplir / Préparer » : quantités recalculées à partir de l'ingrédient de référence (1re ligne chiffrée)
+// Format (réglé sur le PC) : une ligne par ingrédient « 100g Basilic », « 2 têtes Ail » ; les lignes sans chiffre sont des titres ou des notes.
+const LIGNE_ING=/^\s*(\d+(?:[.,]\d+)?)\s*(kg|g|gr|mg|l|cl|ml|bottes?|t[eê]tes?|pi[eè]ces?|pcs?|c\.? ?[àa] ?[sc]\.?|cs|cc|pinc[ée]es?|sachets?|bo[iî]tes?|bacs?|pots?)?\.?\s+(.+)$/i;
+function recetteLignes(txt){return String(txt||"").split("\n").map(l=>{const m=LIGNE_ING.exec(l);return m?{q:+m[1].replace(",","."),u:m[2]||"",nom:m[3].trim()}:{texte:l.trim()}})}
+function fmtQ(q,u){const g=/^(g|gr|mg|ml)$/i.test(u);const v=g?(q>=20?Math.round(q):Math.round(q*10)/10):Math.round(q*100)/100;return String(v).replace(".",",")}
+function recetteSheet(x){
+  const L=recetteLignes(x.recette),ref=L.find(l=>l.q!=null);
+  const corps=k=>L.map(l=>l.q!=null?`<div class="ing${l===ref?" ref":""}"><b>${fmtQ(l.q*k,l.u)}${l.u?" "+esc(l.u):""}</b> ${esc(l.nom)}</div>`:l.texte?`<div class="rnote">${esc(l.texte)}</div>`:"").join("");
+  open(`<h3>📖 ${esc(x.titre)}</h3>
+  ${ref?`<label class="f">${esc(ref.nom)} pesé${/^(g|gr|kg|mg)$/i.test(ref.u)?"":" (quantité)"} <span class="row" style="gap:8px;align-items:center"><input id="r-ref" inputmode="decimal" value="${fmtQ(ref.q,ref.u)}" style="max-width:120px"> ${esc(ref.u)}</span></label>
+  <p class="hint">Tape la quantité de ${esc(ref.nom.toLowerCase())} que tu as : tout le reste se recalcule.</p>`:""}
+  <div class="recette" id="r-c">${corps(1)}</div>
+  <div class="actions"><button class="btn full" id="r-x">Fermer</button></div>`,()=>{
+    $("#r-x").onclick=close;
+    const inp=$("#r-ref");if(inp)inp.oninput=()=>{const v=+String(inp.value).replace(",",".");if(v>0)$("#r-c").innerHTML=corps(v/ref.q)};
+  });
+}
+// choix de la liste à compter (bouton en bas des tâches)
+function choixComptage(){
+  open(`<h3>Que veux-tu compter ?</h3><div class="list">
+    <button class="btn ghost full" data-l="sauces">🧴 Sauces et condiments</button>
+    <button class="btn ghost full" data-l="salade">🥗 Mise en place : bar à salade</button>
+    <button class="btn ghost full" data-l="dessert">🍰 Mise en place : desserts</button></div>
+    <div class="actions"><button class="btn ghost" id="cc-x">Annuler</button></div>`,()=>{
+    $("#cc-x").onclick=close;
+    $("#sheet").querySelectorAll("[data-l]").forEach(b=>b.onclick=()=>{close();comptageSheet(null,b.dataset.l)});
+  });
+}
+async function comptageSheet(tache,liste){
+  liste=tache?(String(tache.type).split(":")[1]||"sauces"):(liste||"sauces");
+  let r;try{r=await call("remplissage",{liste})}catch(e){toast(e.message,true);return}
+  const mep=liste!=="sauces";
+  if(!r.items.length){toast(mep?`Rien à compter dans « ${r.titre} » : la liste se règle sur l'écran de gestion`:"Aucune sauce ni condiment à compter : la liste se règle sur l'écran de gestion",true);return}
   const vals={};
   const grp=(type,titre)=>{const it=r.items.filter(i=>i.type===type);if(!it.length)return"";
-    return `<div class="grp">${titre}</div>`+it.map(i=>`<div class="inv" data-c="${esc(i.id)}"><div class="t"><div class="a">${esc(i.nom)}</div><div class="b">objectif ${i.cible}${i.weekend?" (week-end)":""}${i.aRemplir?` · déjà ${i.aRemplir} à remplir`:""}</div></div>
+    return `<div class="grp">${titre}</div>`+it.map(i=>`<div class="inv" data-c="${esc(i.id)}"><div class="t"><div class="a">${esc(i.nom)}</div><div class="b">objectif ${i.cible}${mep?" "+esc(i.unite):""}${i.weekend?" (week-end)":""}${i.aRemplir?` · déjà ${i.aRemplir} à ${mep?"préparer":"remplir"}`:""}</div></div>
     <div class="step"><button data-d="-1" aria-label="Moins">−</button><input inputmode="numeric" enterkeyhint="next" value="" placeholder="?" aria-label="Nombre ${esc(i.nom)}"><button data-d="1" aria-label="Plus">+</button></div></div>`).join("")};
-  open(`<h3>Compter les pipettes et les condiments</h3><p class="hint">Note combien il en reste de chaque. Ce qui manque devient une tâche « Remplir » qui reste jusqu'à ce qu'elle soit faite.</p>
+  open(mep?`<h3>Mise en place : ${esc(r.titre.toLowerCase())}</h3><p class="hint">Note combien il en reste de chaque. Ce qui manque devient une tâche « Préparer », à faire tout de suite ou demain avant le service ; elle reste jusqu'à ce qu'elle soit faite.</p>
+  <div class="list" id="cl">${grp("mep",r.titre)}</div>`:`<h3>Compter les pipettes et les condiments</h3><p class="hint">Note combien il en reste de chaque. Ce qui manque devient une tâche « Remplir » qui reste jusqu'à ce qu'elle soit faite.</p>
   <div class="list" id="cl">${grp("pipette","Sauces (pipettes)")}${grp("pot","Condiments (pots)")}</div>
   <div class="actions"><button class="btn ghost" id="c-no">Annuler</button><button class="btn" id="c-ok">Valider (0)</button></div>`,()=>{
     entreeSuivante($("#cl"),".step input");
@@ -1128,10 +1161,10 @@ async function comptageSheet(tache){
     $("#c-no").onclick=close;
     $("#c-ok").onclick=async()=>{
       const lignes=Object.keys(vals).filter(k=>vals[k]!=="").map(k=>({itemId:k,qte:vals[k]}));
-      if(!lignes.length){toast("Compte au moins une sauce ou un condiment",true);return}
+      if(!lignes.length){toast(mep?"Compte au moins un produit":"Compte au moins une sauce ou un condiment",true);return}
       const manquants=r.items.filter(i=>vals[i.id]==null||vals[i.id]==="").length;
       const valider=async()=>{$("#c-ok").disabled=true;try{const res=await call("comptageValider",{lignes,tacheId:tache?tache.id:""});
-        open(`<h3>Comptage enregistré ✓</h3>${res.aRemplir.length?`<p class="hint">Ajouté aux tâches (post-service) :</p>${res.aRemplir.map(t=>`<div class="item"><span>🧴</span><div class="t"><div class="a">${esc(t)}</div></div></div>`).join("")}`:`<p class="hint">Tout est au complet. Merci !</p>`}<button class="btn full" id="c-fin">OK</button>`,()=>{$("#c-fin").onclick=()=>{close();go("taches")}});
+        open(`<h3>Comptage enregistré ✓</h3>${res.aRemplir.length?`<p class="hint">Ajouté aux tâches (${mep?"mise en place, aujourd'hui et demain avant le service":"post-service"}) :</p>${res.aRemplir.map(t=>`<div class="item"><span>${mep?"🔪":"🧴"}</span><div class="t"><div class="a">${esc(t)}</div></div></div>`).join("")}`:`<p class="hint">Tout est au complet. Merci !</p>`}<button class="btn full" id="c-fin">OK</button>`,()=>{$("#c-fin").onclick=()=>{close();go("taches")}});
       }catch(e){toast(e.message,true);$("#c-ok").disabled=false}};
       if(manquants&&!confirm(manquants+(manquants>1?" articles pas comptés":" article pas compté")+". Valider quand même ?"))return;
       valider();

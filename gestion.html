@@ -197,7 +197,7 @@ async function start(){
 }
 
 // ---------- coque : menu à gauche
-const PAGES=[["taches","✅","Tâches"],["planning","📅","Planning"],["commandes","🛒","Commandes"],["articles","📦","Articles"],["fournisseurs","🚚","Fournisseurs"],["remplissage","🧴","Sauces & condiments"],["rapports","🧾","Rapports"],["equipe","👥","Équipe"]];
+const PAGES=[["taches","✅","Tâches"],["planning","📅","Planning"],["commandes","🛒","Commandes"],["articles","📦","Articles"],["fournisseurs","🚚","Fournisseurs"],["remplissage","🧴","Remplissage & mise en place"],["rapports","🧾","Rapports"],["equipe","👥","Équipe"]];
 function shell(){
   $("#root").innerHTML=`<div class="shell"><aside class="side"><div class="logo"><img src="icon-192.png" alt=""><b>Gestion<br>Café La Victoria</b></div>
   ${PAGES.map(([k,i,l,later])=>`<button class="nav ${later?"later":""}" data-v="${k}" ${view===k?'aria-current="page"':""} ${later?'title="Bientôt"':""}><span>${i}</span>${l}${k==="taches"?'<span class="n" id="nsugg" hidden></span>':""}${later?'<span class="muted small" style="margin-left:auto">bientôt</span>':""}</button>`).join("")}
@@ -566,33 +566,54 @@ async function pFournisseurs(){
 }
 
 // =====================================================================================  SAUCES & CONDIMENTS
+// Sauces & condiments + mise en place (bar à salade, desserts) : une liste par onglet
+const RL={liste:"sauces"};
 async function pRemplissage(){
-  const r=await call("remplissageAdmin");
+  const r=await call("remplissageAdmin"), L=RL.liste, mep=L!=="sauces";
+  const items=r.items.filter(i=>i.liste===L), ouverts=r.ouverts.filter(o=>(o.liste||"sauces")===L), dern=(r.derniers||{})[L], tache=(r.taches||[]).find(t=>t.liste===L);
+  const nbRec=t=>String(t||"").split("\n").filter(l=>/^\s*\d/.test(l)).length;
   const row=i=>`<tr data-id="${esc(i.id)}">
     <td><input data-f="nom" value="${esc(i.nom)}"></td>
-    <td><select data-f="type"><option value="pipette" ${i.type==="pipette"?"selected":""}>Pipette (sauce)</option><option value="pot" ${i.type==="pot"?"selected":""}>Pot (condiment)</option></select></td>
+    <td>${mep?`<input data-f="unite" value="${esc(i.unite||"bac")}" placeholder="bac, portion…" title="Unité au singulier : bac, portion, plaque…">`:`<select data-f="type"><option value="pipette" ${i.type==="pipette"?"selected":""}>Pipette (sauce)</option><option value="pot" ${i.type==="pot"?"selected":""}>Pot (condiment)</option></select>`}</td>
     <td><input data-f="cible" type="number" min="0" value="${esc(i.cible)}"></td>
     <td><input data-f="cibleWE" type="number" min="0" value="${esc(i.cibleWE||"")}" placeholder="${esc(i.cible)}"></td>
     <td><input data-f="ordre" type="number" value="${esc(i.ordre)}"></td>
     <td style="text-align:center"><input type="checkbox" data-f="actif" ${i.actif!=="non"?"checked":""} style="width:auto"></td>
+    <td><button class="btn small ${i.recette?"":"ghost"}" data-rec="${esc(i.id)}" title="Recette affichée sur la tâche">${i.recette?`📖 ${nbRec(i.recette)} ingr.`:"+ Recette"}</button></td>
     <td style="text-align:center"><button class="btn small ghost" data-del="${esc(i.id)}" title="Supprimer">✕</button></td></tr>`;
-  const dern=r.dernier;
-  $("#main").innerHTML=`<div class="top"><h1 class="grow">Sauces & condiments</h1><span class="saved" id="saved"></span></div>
-  <p class="muted small" style="margin-top:-6px">Chaque jour au post-service, la tâche « Compter les pipettes de sauce et les pots de condiments » ouvre l'écran de comptage. Le jeudi et le vendredi, on remplit jusqu'à l'objectif week-end pour ne presque rien préparer samedi et dimanche (vide = même objectif). Pour chaque article sous l'objectif, une tâche « Remplir N … » est créée et reste dans les tâches jusqu'à ce qu'elle soit cochée.</p>
+  const tabs=Object.keys(r.listes).map(k=>`<button class="chip" data-l="${k}" aria-pressed="${k===L}">${{sauces:"🧴",salade:"🥗",dessert:"🍰"}[k]||""} ${esc(r.listes[k])} <span class="muted">(${r.items.filter(i=>i.liste===k).length})</span></button>`).join("");
+  $("#main").innerHTML=`<div class="top"><h1 class="grow">Remplissage & mise en place</h1><span class="saved" id="saved"></span></div>
+  <div class="chips" style="margin:-4px 0 10px">${tabs}</div>
+  <p class="muted small" style="margin-top:-2px">${mep?`Après le service, la tâche de comptage ouvre la liste « ${esc(r.listes[L])} » : on note ce qui reste. Pour chaque produit sous l'objectif, une tâche « Préparer N … » apparaît tout de suite dans les tâches (Pré-service · Mise en place) et reste le lendemain jusqu'à ce qu'elle soit cochée. Le jeudi et le vendredi, on prépare jusqu'à l'objectif week-end (vide = même objectif).`:`Chaque jour au post-service, la tâche « Compter les pipettes de sauce et les pots de condiments » ouvre l'écran de comptage. Le jeudi et le vendredi, on remplit jusqu'à l'objectif week-end pour ne presque rien préparer samedi et dimanche (vide = même objectif). Pour chaque article sous l'objectif, une tâche « Remplir N … » est créée et reste dans les tâches jusqu'à ce qu'elle soit cochée.`} La recette s'ouvre avec le bouton « 📖 Recette » de la tâche.</p>
+  ${tache?"":`<div class="card soft" style="margin-bottom:12px"><div class="row" style="gap:10px;align-items:center"><span class="grow small">Pas encore de tâche de comptage pour cette liste : elle n'apparaît pas dans les tâches de l'équipe. (Le bouton « 📋 Compter » en bas des tâches marche quand même.)</span><button class="btn small" id="mk-t">Créer la tâche « Compter la mise en place » (post-service, chaque jour)</button></div></div>`}
   <div style="display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:16px;align-items:start">
-  <div class="card"><div class="scrollx"><table class="t" style="min-width:640px"><colgroup><col><col style="width:160px"><col style="width:84px"><col style="width:96px"><col style="width:64px"><col style="width:56px"><col style="width:46px"></colgroup>
-    <thead><tr><th>Nom</th><th>Type</th><th>Objectif</th><th>Objectif jeu./ven. (week-end)</th><th>Ordre</th><th>Actif</th><th></th></tr></thead><tbody id="tb">${r.items.map(row).join("")||`<tr><td colspan="7" class="muted">Aucun article</td></tr>`}</tbody></table></div>
-    <div class="row" style="margin-top:10px;gap:8px"><input id="n-nom" placeholder="Nouvelle sauce ou nouveau condiment" style="flex:1"><select id="n-type" style="width:170px"><option value="pipette">Pipette (sauce)</option><option value="pot">Pot (condiment)</option></select><input id="n-cible" type="number" min="0" value="6" style="width:80px" title="Objectif"><button class="btn" id="n-add">Ajouter</button></div></div>
+  <div class="card"><div class="scrollx"><table class="t" style="min-width:760px"><colgroup><col><col style="width:150px"><col style="width:84px"><col style="width:96px"><col style="width:64px"><col style="width:56px"><col style="width:110px"><col style="width:46px"></colgroup>
+    <thead><tr><th>Nom</th><th>${mep?"Unité":"Type"}</th><th>Objectif</th><th>Objectif jeu./ven. (week-end)</th><th>Ordre</th><th>Actif</th><th>Recette</th><th></th></tr></thead><tbody id="tb">${items.map(row).join("")||`<tr><td colspan="8" class="muted">Aucun produit : ajoute-les ci-dessous.</td></tr>`}</tbody></table></div>
+    <div class="row" style="margin-top:10px;gap:8px"><input id="n-nom" placeholder="${mep?"Nouveau produit (ex. Carottes râpées)":"Nouvelle sauce ou nouveau condiment"}" style="flex:1">${mep?`<input id="n-unite" value="bac" style="width:120px" title="Unité">`:`<select id="n-type" style="width:170px"><option value="pipette">Pipette (sauce)</option><option value="pot">Pot (condiment)</option></select>`}<input id="n-cible" type="number" min="0" value="${mep?2:6}" style="width:80px" title="Objectif"><button class="btn" id="n-add">Ajouter</button></div></div>
   <div>
-    <div class="card"><h3>À remplir en ce moment (${r.ouverts.length})</h3>${r.ouverts.map(o=>`<div class="small" style="padding:4px 0">• ${esc(o.titre)} <span class="muted">· depuis le ${o.creeLe.slice(8,10)}/${o.creeLe.slice(5,7)} ${o.creeLe.slice(11,16)}</span></div>`).join("")||`<p class="muted small">Rien à remplir.</p>`}</div>
+    <div class="card"><h3>${mep?"À préparer":"À remplir"} en ce moment (${ouverts.length})</h3>${ouverts.map(o=>`<div class="small" style="padding:4px 0">• ${esc(o.titre)} <span class="muted">· depuis le ${o.creeLe.slice(8,10)}/${o.creeLe.slice(5,7)} ${o.creeLe.slice(11,16)}</span></div>`).join("")||`<p class="muted small">Rien en attente.</p>`}</div>
     <div class="card" style="margin-top:16px"><h3>Dernier comptage</h3>${dern?`<p class="muted small">${dern.le.slice(8,10)}/${dern.le.slice(5,7)} à ${dern.le.slice(11,16)} par ${esc(dern.par)}</p>${dern.lignes.map(l=>`<div class="small row" style="padding:2px 0"><span class="grow">${esc(l.nom)}</span><b style="${l.qte<l.cible?"color:var(--warn)":""}">${l.qte} / ${l.cible}</b></div>`).join("")}`:`<p class="muted small">Pas encore de comptage.</p>`}</div>
   </div></div>`;
   const ok=()=>{const s=$("#saved");if(s){s.textContent="✓ Enregistré";setTimeout(()=>{if($("#saved"))$("#saved").textContent=""},1500)}};
+  $("#main").querySelectorAll(".chips [data-l]").forEach(b=>b.onclick=()=>{RL.liste=b.dataset.l;pRemplissage()});
+  const mk=$("#mk-t");if(mk)mk.onclick=async()=>{await act(()=>call("tacheSave",{titre:`Compter la mise en place : ${r.listes[L].toLowerCase()}`,moment:"Post-service",freq:"jour",type:"comptage:"+L,section:"Mise en place"}),"Tâche créée");pRemplissage()};
   $("#tb").addEventListener("change",async e=>{const tr=e.target.closest("tr[data-id]"),f=e.target.dataset.f;if(!tr||!f)return;
     try{await call("remplissageSave",{id:tr.dataset.id,[f]:e.target.type==="checkbox"?(e.target.checked?"oui":"non"):e.target.value.trim()});ok();if(f==="type"||f==="ordre")pRemplissage()}catch(err){toast(err.message,true);pRemplissage()}});
-  $("#tb").querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{const i=r.items.find(x=>x.id===b.dataset.del);confirmer(`Supprimer « ${i.nom} » ?`,"Il ne sera plus compté, et sa tâche « Remplir » en cours disparaît.","Supprimer",async()=>{await act(()=>call("remplissageSupprimer",{id:i.id}),"Supprimé");pRemplissage()})});
+  $("#tb").querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{const i=r.items.find(x=>x.id===b.dataset.del);confirmer(`Supprimer « ${i.nom} » ?`,`Il ne sera plus compté, et sa tâche « ${mep?"Préparer":"Remplir"} » en cours disparaît.`,"Supprimer",async()=>{await act(()=>call("remplissageSupprimer",{id:i.id}),"Supprimé");pRemplissage()})});
+  $("#tb").querySelectorAll("[data-rec]").forEach(b=>b.onclick=()=>recetteDialog(r.items.find(x=>x.id===b.dataset.rec)));
   $("#n-add").onclick=async()=>{const nom=$("#n-nom").value.trim();if(!nom){toast("Donne un nom",true);return}
-    try{await call("remplissageSave",{nom,type:$("#n-type").value,cible:$("#n-cible").value||"6"});toast("Ajouté");pRemplissage()}catch(err){toast(err.message,true)}};
+    const d=mep?{nom,liste:L,type:"mep",unite:$("#n-unite").value.trim()||"bac",cible:$("#n-cible").value||"2"}:{nom,liste:"sauces",type:$("#n-type").value,cible:$("#n-cible").value||"6"};
+    try{await call("remplissageSave",d);toast("Ajouté");pRemplissage()}catch(err){toast(err.message,true)}};
+}
+// éditeur de recette : une ligne par ingrédient ; la 1re ligne chiffrée sert de référence (on tape son poids, le reste se recalcule)
+function recetteDialog(i){
+  dialog(`<h3>📖 Recette : ${esc(i.nom)}</h3>
+  <p class="muted small">Une ligne par ingrédient, la quantité d'abord : « 100g Basilic », « 2 têtes Ail ». <b>La première ligne chiffrée est la référence</b> : sur le téléphone, on tape combien on en a et toutes les quantités se recalculent. Les lignes sans chiffre s'affichent comme notes (étapes, conseils).</p>
+  <textarea id="r-t" style="min-height:260px;width:100%;font-family:inherit" placeholder="100g Basilic&#10;75g Parmesan&#10;50g Huile d'olive&#10;…&#10;Mixer le basilic avec les glaçons…">${esc(i.recette||"")}</textarea>
+  <div class="acts"><button class="btn ghost" data-x>Annuler</button><button class="btn" data-ok>Enregistrer</button></div>`,(d,close)=>{
+    d.querySelector("[data-x]").onclick=close;
+    d.querySelector("[data-ok]").onclick=async()=>{await act(()=>call("remplissageSave",{id:i.id,recette:d.querySelector("#r-t").value}),"Recette enregistrée");close();pRemplissage()};
+  });
 }
 
 // =====================================================================================  COMMANDES
