@@ -705,9 +705,9 @@ async function pCommandes(garder){
       <div id="ca-wrap" style="max-height:calc(100vh - 290px);min-height:300px;overflow:auto"><table class="t" style="min-width:460px"><colgroup><col><col style="width:96px"><col style="width:100px"><col style="width:70px"><col style="width:150px"></colgroup>
       <thead><tr>${th("nom","Article")}${th("zone","Zone")}${th("stock","Dernier stock")}${th("mini","Mini / cible")}<th></th></tr></thead><tbody id="ca">
       ${dispo.map(a=>`<tr data-a="${esc(a.id)}" class="${bas(a)?"low":""}"><td>${esc(a.nom)}${a.ref?`<div class="small muted">${esc(a.ref)}</div>`:""}</td><td class="small">${esc(a.zone)}</td><td>${stockTxt(a.id)}</td><td class="small">${esc(a.min||"–")} / ${esc(a.cible||"–")}</td>
-        <td><div class="row" style="gap:4px"><input value="${esc(a.cible!==""&&st[a.id]&&st[a.id].qte!=null?Math.max(1,Math.ceil(+a.cible-st[a.id].qte)):1)}" maxlength="40" style="width:76px" title="Un nombre ou du texte : 2 cartons, 1 pack…"><button class="btn small" data-add="${esc(a.id)}">+</button><button class="btn small ghost" data-ret="${esc(a.id)}" title="Retirer de la liste (plus proposé ni compté dans les inventaires)">🗑</button></div></td></tr>`).join("")||`<tr><td colspan="5" class="muted">Aucun autre article de ce fournisseur.</td></tr>`}
+        <td><div class="row" style="gap:4px"><input value="${esc(a.cible!==""&&st[a.id]&&st[a.id].qte!=null?Math.max(1,Math.ceil(+a.cible-st[a.id].qte)):1)}" maxlength="40" style="width:76px" title="Un nombre ou du texte : 2 cartons, 1 pack…"><button class="btn small" data-add="${esc(a.id)}">+</button><button class="btn small ghost" data-ret="${esc(a.id)}" title="Retirer de la liste ${esc(f.nom)} (il reste dans les inventaires)">🗑</button></div></td></tr>`).join("")||`<tr><td colspan="5" class="muted">Aucun autre article de ce fournisseur.</td></tr>`}
       </tbody></table></div>
-      <div class="row" style="gap:8px;margin-top:10px"><input id="c-libre" placeholder="Autre chose (hors liste)…" style="flex:1"><input id="c-libreq" value="1" maxlength="40" style="width:120px" placeholder="ex. 1 carton"><button class="btn ghost" id="c-libreok">Ajouter</button><button class="btn" id="c-new" title="Crée l'article chez ce fournisseur : il apparaît aussi dans les inventaires">+ Nouvel article</button></div></div>`:""}`;
+      <div class="row" style="gap:8px;margin-top:10px"><input id="c-libre" placeholder="Autre chose (hors liste)…" style="flex:1"><input id="c-libreq" value="1" maxlength="40" style="width:120px" placeholder="ex. 1 carton"><button class="btn ghost" id="c-libreok">Ajouter</button><button class="btn" id="c-inv" title="Choisir un article déjà dans les inventaires et le mettre chez ${esc(f.nom)}">+ Article de l'inventaire</button><button class="btn ghost" id="c-new" title="Crée l'article chez ce fournisseur : il apparaît aussi dans les inventaires">+ Nouvel article</button></div></div>`:""}`;
   }
   $("#main").innerHTML=`<div class="top"><h1 class="grow">Commandes</h1><span class="saved" id="saved"></span><select id="n-f" style="width:200px"><option value="">Fournisseur…</option>${r.fournisseurs.filter(f=>f.type==="marchandise").sort((a,b)=>a.nom.localeCompare(b.nom,"fr")).map(f=>`<option value="${esc(f.id)}">${esc(f.nom)}</option>`).join("")}</select><button class="btn" id="n-ok">+ Nouvelle commande</button></div>
   ${retard.length?`<div class="card" style="margin-bottom:14px;border-color:var(--warn)"><b>Pas commandé depuis longtemps :</b> ${retard.map(f=>`${esc(f.nom)} (${f.depuis} j, d'habitude tous les ${Math.round(f.intervalle)} j)`).join(" · ")}</div>`:""}
@@ -782,9 +782,24 @@ async function pCommandes(garder){
     sauver(c.lignes.concat(add),true);toast(add.length+" article"+(add.length>1?"s":"")+" ajouté"+(add.length>1?"s":""))};
   document.querySelectorAll("#ca-wrap th[data-tri]").forEach(h=>h.onclick=()=>{const k=h.dataset.tri;CM.sens=CM.tri===k?-CM.sens:1;CM.tri=k;pCommandes()});
   const cq=$("#c-q");if(cq){let t;cq.oninput=e=>{clearTimeout(t);t=setTimeout(()=>{CM.q=e.target.value;pCommandes().then(()=>{const i=$("#c-q");if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}})},300)}}
-  // 🗑 retirer un article de la liste du fournisseur (actif = non : plus proposé, plus compté ; récupérable dans Articles)
+  // 🗑 retirer un article de la liste du fournisseur : il n'est plus chez lui, mais reste compté dans les inventaires (« Sans fournisseur »), mêmes jours
   document.querySelectorAll("#ca [data-ret]").forEach(b=>b.onclick=()=>{const a=r.articles.find(x=>x.id===b.dataset.ret);
-    confirmer(`Retirer « ${a.nom} » ?`,"Il ne sera plus proposé ici ni compté dans les inventaires. Tu peux le remettre depuis la page Articles (case Actif).","Retirer",async()=>{await act(()=>call("articleSave",{id:a.id,actif:"non"}),"Article retiré");pCommandes(true)})});
+    confirmer(`Retirer « ${a.nom} » de la liste ${f.nom} ?`,"Il reste dans les inventaires, rangé dans « Sans fournisseur ». Tu peux le remettre avec « + Article de l'inventaire ».","Retirer de la liste",async()=>{await act(()=>call("articleSave",{id:a.id,fournisseurId:"",jours:a.jours||""}),"Retiré de la liste");pCommandes(true)})});
+  // + Article de l'inventaire : un article déjà compté (sans fournisseur ou chez un autre) passe chez ce fournisseur ; ses jours d'inventaire ne bougent pas
+  const ci=$("#c-inv");if(ci)ci.onclick=()=>{const fn=id=>(r.fournisseurs.find(x=>x.id===id)||{}).nom||"";
+    const autres=r.articles.filter(a=>a.fournisseurId!==c.fournisseurId).sort((a,b)=>(a.fournisseurId?1:0)-(b.fournisseurId?1:0)||a.nom.localeCompare(b.nom,"fr"));
+    dialog(`<h3>Ajouter à la liste ${esc(f.nom)}</h3><p class="muted small">Articles déjà dans les inventaires. Les « sans fournisseur » d'abord. Il garde ses jours d'inventaire.</p>
+    <input id="ai-q" placeholder="🔍 Chercher…" style="width:100%;margin-bottom:8px">
+    <div style="max-height:55vh;overflow:auto"><table class="t"><tbody id="ai-l"></tbody></table></div>
+    <div class="acts"><button class="btn ghost" data-x>Fermer</button></div>`,(d,close)=>{
+      d.querySelector("[data-x]").onclick=close;const q=d.querySelector("#ai-q");q.focus();let fait=0;
+      const draw=()=>{const t=q.value.trim().toLowerCase();d.querySelector("#ai-l").innerHTML=autres.filter(a=>!t||(a.nom+" "+(a.ref||"")+" "+a.zone).toLowerCase().includes(t)).slice(0,200)
+        .map(a=>`<tr><td>${esc(a.nom)}<div class="small muted">${esc(a.zone||"")}${a.fournisseurId?" · chez "+esc(fn(a.fournisseurId)):" · sans fournisseur"}</div></td><td style="width:90px"><button class="btn small" data-pick="${esc(a.id)}">Ajouter</button></td></tr>`).join("")||`<tr><td class="muted">Aucun article</td></tr>`};
+      draw();q.oninput=draw;
+      d.querySelector("#ai-l").addEventListener("click",async e=>{const b=e.target.closest("[data-pick]");if(!b)return;const a=autres.find(x=>x.id===b.dataset.pick);
+        b.disabled=true;try{await call("articleSave",{id:a.id,fournisseurId:c.fournisseurId,jours:a.jours||""});a.fournisseurId=c.fournisseurId;fait++;b.textContent="✓ Ajouté";toast(`${a.nom} → ${f.nom}`)}catch(err){toast(err.message,true);b.disabled=false}});
+      const fermer=close;d.querySelector("[data-x]").onclick=()=>{fermer();if(fait)pCommandes(true)};
+    })};
   // + Nouvel article : créé chez ce fournisseur, avec ses jours d'inventaire ; peut être ajouté tout de suite à la commande
   const nw=$("#c-new");if(nw)nw.onclick=()=>{const zones=[...new Set(r.articles.map(a=>a.zone).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"fr"));
     const libre=($("#c-libre")||{}).value||"";
