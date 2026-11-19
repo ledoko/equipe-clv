@@ -702,12 +702,12 @@ async function pCommandes(garder){
       </div></div>
     ${edit?`<div class="card"><div class="row wrap" style="gap:10px;align-items:center"><h3 class="grow" style="margin:0">Ajouter des articles ${esc(f.nom)}</h3>${dispo.some(bas)?`<button class="btn sun" id="c-bas">+ Tout le stock bas (${dispo.filter(bas).length})</button>`:""}<input id="c-q" placeholder="🔍 Chercher…" value="${esc(CM.q)}" style="width:180px"></div>
       <p class="muted small">${CM.tri==="stock"&&CM.sens>0?"Triés du stock le plus bas au plus haut (dernier inventaire)":"Clique sur un en-tête de colonne pour trier"}. En rouge : à 0, ou au mini et en dessous (sans mini réglé : seulement à 0). La quantité peut être un nombre ou du texte : « 2 cartons », « 1 pack ».</p>
-      <div id="ca-wrap" style="max-height:calc(100vh - 290px);min-height:300px;overflow:auto"><table class="t" style="min-width:460px"><colgroup><col><col style="width:96px"><col style="width:100px"><col style="width:70px"><col style="width:120px"></colgroup>
+      <div id="ca-wrap" style="max-height:calc(100vh - 290px);min-height:300px;overflow:auto"><table class="t" style="min-width:460px"><colgroup><col><col style="width:96px"><col style="width:100px"><col style="width:70px"><col style="width:150px"></colgroup>
       <thead><tr>${th("nom","Article")}${th("zone","Zone")}${th("stock","Dernier stock")}${th("mini","Mini / cible")}<th></th></tr></thead><tbody id="ca">
       ${dispo.map(a=>`<tr data-a="${esc(a.id)}" class="${bas(a)?"low":""}"><td>${esc(a.nom)}${a.ref?`<div class="small muted">${esc(a.ref)}</div>`:""}</td><td class="small">${esc(a.zone)}</td><td>${stockTxt(a.id)}</td><td class="small">${esc(a.min||"–")} / ${esc(a.cible||"–")}</td>
-        <td><div class="row" style="gap:4px"><input value="${esc(a.cible!==""&&st[a.id]&&st[a.id].qte!=null?Math.max(1,Math.ceil(+a.cible-st[a.id].qte)):1)}" maxlength="40" style="width:76px" title="Un nombre ou du texte : 2 cartons, 1 pack…"><button class="btn small" data-add="${esc(a.id)}">+</button></div></td></tr>`).join("")||`<tr><td colspan="5" class="muted">Aucun autre article de ce fournisseur.</td></tr>`}
+        <td><div class="row" style="gap:4px"><input value="${esc(a.cible!==""&&st[a.id]&&st[a.id].qte!=null?Math.max(1,Math.ceil(+a.cible-st[a.id].qte)):1)}" maxlength="40" style="width:76px" title="Un nombre ou du texte : 2 cartons, 1 pack…"><button class="btn small" data-add="${esc(a.id)}">+</button><button class="btn small ghost" data-ret="${esc(a.id)}" title="Retirer de la liste (plus proposé ni compté dans les inventaires)">🗑</button></div></td></tr>`).join("")||`<tr><td colspan="5" class="muted">Aucun autre article de ce fournisseur.</td></tr>`}
       </tbody></table></div>
-      <div class="row" style="gap:8px;margin-top:10px"><input id="c-libre" placeholder="Autre chose (hors liste)…" style="flex:1"><input id="c-libreq" value="1" maxlength="40" style="width:120px" placeholder="ex. 1 carton"><button class="btn ghost" id="c-libreok">Ajouter</button></div></div>`:""}`;
+      <div class="row" style="gap:8px;margin-top:10px"><input id="c-libre" placeholder="Autre chose (hors liste)…" style="flex:1"><input id="c-libreq" value="1" maxlength="40" style="width:120px" placeholder="ex. 1 carton"><button class="btn ghost" id="c-libreok">Ajouter</button><button class="btn" id="c-new" title="Crée l'article chez ce fournisseur : il apparaît aussi dans les inventaires">+ Nouvel article</button></div></div>`:""}`;
   }
   $("#main").innerHTML=`<div class="top"><h1 class="grow">Commandes</h1><span class="saved" id="saved"></span><select id="n-f" style="width:200px"><option value="">Fournisseur…</option>${r.fournisseurs.filter(f=>f.type==="marchandise").sort((a,b)=>a.nom.localeCompare(b.nom,"fr")).map(f=>`<option value="${esc(f.id)}">${esc(f.nom)}</option>`).join("")}</select><button class="btn" id="n-ok">+ Nouvelle commande</button></div>
   ${retard.length?`<div class="card" style="margin-bottom:14px;border-color:var(--warn)"><b>Pas commandé depuis longtemps :</b> ${retard.map(f=>`${esc(f.nom)} (${f.depuis} j, d'habitude tous les ${Math.round(f.intervalle)} j)`).join(" · ")}</div>`:""}
@@ -782,6 +782,27 @@ async function pCommandes(garder){
     sauver(c.lignes.concat(add),true);toast(add.length+" article"+(add.length>1?"s":"")+" ajouté"+(add.length>1?"s":""))};
   document.querySelectorAll("#ca-wrap th[data-tri]").forEach(h=>h.onclick=()=>{const k=h.dataset.tri;CM.sens=CM.tri===k?-CM.sens:1;CM.tri=k;pCommandes()});
   const cq=$("#c-q");if(cq){let t;cq.oninput=e=>{clearTimeout(t);t=setTimeout(()=>{CM.q=e.target.value;pCommandes().then(()=>{const i=$("#c-q");if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}})},300)}}
+  // 🗑 retirer un article de la liste du fournisseur (actif = non : plus proposé, plus compté ; récupérable dans Articles)
+  document.querySelectorAll("#ca [data-ret]").forEach(b=>b.onclick=()=>{const a=r.articles.find(x=>x.id===b.dataset.ret);
+    confirmer(`Retirer « ${a.nom} » ?`,"Il ne sera plus proposé ici ni compté dans les inventaires. Tu peux le remettre depuis la page Articles (case Actif).","Retirer",async()=>{await act(()=>call("articleSave",{id:a.id,actif:"non"}),"Article retiré");pCommandes(true)})});
+  // + Nouvel article : créé chez ce fournisseur, avec ses jours d'inventaire ; peut être ajouté tout de suite à la commande
+  const nw=$("#c-new");if(nw)nw.onclick=()=>{const zones=[...new Set(r.articles.map(a=>a.zone).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"fr"));
+    const libre=($("#c-libre")||{}).value||"";
+    dialog(`<h3>Nouvel article ${esc(f.nom)}</h3>
+    <p class="muted small">Il sera compté dans les inventaires aux mêmes jours que les autres articles ${esc(f.nom)}.</p>
+    <div class="g2"><label class="f">Nom (comme dans l'inventaire)<input id="na-nom" value="${esc(libre.trim())}"></label><label class="f">Nom catalogue fournisseur (pour l'email)<input id="na-ref" placeholder="facultatif"></label></div>
+    <div class="g3"><label class="f">Zone<input id="na-zone" list="na-zones" placeholder="ex. Frigo n°2"><datalist id="na-zones">${zones.map(z=>`<option value="${esc(z)}">`).join("")}</datalist></label>
+      <label class="f">Cartonnage<select id="na-cart"><option value="">—</option>${["unité","kg","paquet","carton"].map(x=>`<option>${x}</option>`).join("")}</select></label>
+      <label class="f">Mini / cible<span class="row" style="gap:6px"><input id="na-min" type="number" min="0" placeholder="mini" style="width:70px"><input id="na-cib" type="number" min="0" placeholder="cible" style="width:70px"></span></label></div>
+    <label class="small row" style="gap:6px;align-items:center;margin-top:6px"><input type="checkbox" id="na-cmd" checked style="width:auto"> L'ajouter aussi à cette commande, quantité <input id="na-q" value="1" maxlength="40" style="width:90px"></label>
+    <div class="acts"><button class="btn ghost" data-x>Annuler</button><button class="btn" data-ok>Créer</button></div>`,(d,close)=>{
+      d.querySelector("[data-x]").onclick=close;d.querySelector("#na-nom").focus();
+      d.querySelector("[data-ok]").onclick=async()=>{const v=id=>d.querySelector(id).value.trim(),nom=v("#na-nom");if(!nom){toast("Donne un nom",true);return}
+        const res=await act(()=>call("articleSave",{nom,ref:v("#na-ref"),zone:v("#na-zone"),cartonnage:v("#na-cart"),min:v("#na-min"),cible:v("#na-cib"),fournisseurId:c.fournisseurId,unite:"unité"}),"Article créé");
+        close();
+        if(d.querySelector("#na-cmd").checked&&vraieQte(v("#na-q"))){if($("#c-libre"))$("#c-libre").value="";sauver(c.lignes.concat([{articleId:res.id,nom,unite:"",qte:v("#na-q")}]),true)}
+        else pCommandes(true)};
+    })};
   const lo=$("#c-libreok");if(lo)lo.onclick=()=>{const n=$("#c-libre").value.trim(),q=$("#c-libreq").value.trim();if(!n||!vraieQte(q)){toast("Nom et quantité",true);return}sauver(c.lignes.concat([{articleId:"",nom:n,unite:"",qte:q}]),true)};
 }
 
