@@ -708,10 +708,11 @@ async function pCommandes(garder){
       <thead><tr><th>Article</th><th>Quantité</th><th>Unité</th><th>Dernier stock</th><th></th></tr></thead><tbody id="cl">
       ${c.lignes.map((l,i)=>`<tr data-i="${i}"><td>${esc(l.nom)}${l.articleId&&art[l.articleId]&&art[l.articleId].ref?`<div class="small muted">${esc(art[l.articleId].ref)}</div>`:""}</td>
         <td>${edit?`<input data-f="qte" value="${esc(l.qte)}" placeholder="ex. 2 cartons" maxlength="40">`:esc(l.qte)}</td>
-        <td>${edit?`<input data-f="unite" value="${esc(l.unite||"")}">`:esc(l.unite||"")}</td>
+        <td>${edit?`<input data-f="unite" list="dl-uc" value="${esc(l.unite||"")}" title="Retenue pour cet article : elle reviendra à sa prochaine commande">`:esc(l.unite||"")}</td>
         <td>${l.articleId?stockTxt(l.articleId):""}</td>
         <td>${edit?`<button class="btn small ghost" data-del="${i}" title="Retirer">✕</button>`:""}</td></tr>`).join("")||`<tr><td colspan="5" class="muted">Commande vide : ajoute des articles ci-dessous.</td></tr>`}
       </tbody></table></div>
+      <datalist id="dl-uc">${[...new Set(["Cartons","Paquets","kg","bottes","Unités"].concat(r.commandes.flatMap(x=>x.lignes.map(l=>l.unite)).filter(u=>u&&u!=="g")))].map(u=>`<option value="${esc(u)}">`).join("")}</datalist>
       <div class="row wrap" style="gap:8px;margin-top:14px">
         ${edit&&c.fournisseurId==="f_lavictoria"?`<button class="btn ghost" id="c-eta" title="Recalcule les grammes des thés en vrac d'après la dernière pesée (boîte ≈ 100 g, 250 g par boîte, par 50 g)">⚖️ Étalonner</button><button class="btn" id="c-shop" title="Crée un brouillon de commande Shopify au nom de SUNSHINE COFFEE (rien n'est facturé)">🛍️ Préparer dans Shopify</button>`:""}${edit?`<button class="btn${c.fournisseurId==="f_lavictoria"?" ghost":""}" id="c-mail">${f.canal==="whatsapp"?"🟢 Préparer le WhatsApp":f.canal==="sms"?"💬 Préparer le SMS":"✉️ Préparer l'email"}</button><button class="btn ghost" id="c-copy">Copier le texte</button><button class="btn sun" id="c-env">Marquer envoyée</button><button class="btn ghost" id="c-sup" style="margin-left:auto">Supprimer</button>`
         :c.statut==="envoyee"?`<button class="btn" id="c-rec">Marquer reçue</button><button class="btn ghost" id="c-copy">Copier le texte</button><button class="btn ghost" id="c-back">Remettre « à passer »</button>`
