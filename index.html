@@ -172,6 +172,7 @@ h2{font-family:var(--display);font-weight:600;font-size:1.1rem;margin:0}
 .invdays{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .invday{display:flex;flex-direction:column;gap:8px;text-align:left;border:1.5px solid var(--line);font:inherit;color:inherit}
 .invday.cur{border-color:var(--lagoon)}
+.invf{border:1.5px solid var(--line);display:flex;flex-direction:column;gap:6px}.invf.cur{border-color:var(--lagoon)}
 .invday:disabled{opacity:.5}
 .invday .pct{font-family:var(--display);font-weight:800;font-size:1.3rem}
 .invday .pct.ok{color:var(--ok)}
@@ -230,7 +231,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-18a";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-21a";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -552,7 +553,7 @@ async function vTaches(){
     const badge=x.freq==="semaine"?`<span class="pill info">Hebdo</span>`:x.freq==="mois"?`<span class="pill info">Mensuel</span>`:"";
     const late=x.retard&&!x.fait?`<span class="pill no">Prévu ${jourCourt(x.echeance)}</span>`:"";
     const who=`<span class="who2">${x.fait?`✓ Fait par ${esc(x.fait.par)} à ${x.fait.le.slice(11,16)}`:""}</span>`;
-    const meta=[badge,late,String(x.type).startsWith("comptage")&&!x.fait?`<span class="pill info">📋 Ouvre le comptage</span>`:"",x.recette?`<span class="pill info recbtn" data-rec="${esc(x.id)}" role="button">📖 Recette</span>`:"",x.qui?`<span>· ${esc(x.qui)}</span>`:"",who].filter(Boolean).join("");
+    const meta=[badge,late,String(x.type).startsWith("comptage")&&!x.fait?`<span class="pill info">📋 Ouvre le comptage</span>`:"",x.type==="inventaire"&&!x.fait?`<span class="pill info">📦 Ouvre l'inventaire</span>`:"",x.recette?`<span class="pill info recbtn" data-rec="${esc(x.id)}" role="button">📖 Recette</span>`:"",x.qui?`<span>· ${esc(x.qui)}</span>`:"",who].filter(Boolean).join("");
     html+=`<button class="task ${x.fait?"done":""}" data-t="${esc(x.id)}" ${d>today()?"disabled":""}><span class="box">${x.fait?"✓":""}</span><span class="grow"><div class="tt">${esc(x.titre)}</div>${x.note?`<div class="nn">${esc(x.note)}</div>`:""}<div class="meta">${meta}</div></span></button>`;
   });
   $("#app").innerHTML=`${header("Tâches")}
@@ -575,6 +576,7 @@ async function vTaches(){
     const b=e.target.closest("[data-t]");if(!b||b.disabled)return;
     const x=list.find(y=>y.id===b.dataset.t), fait=!x.fait;
     if(String(x.type).startsWith("comptage")&&fait&&d===today()){comptageSheet(x);return}
+    if(x.type==="inventaire"){sub={lundi:addDays(d,1-wday(d)),jour:d,fid:x.fournisseurId||""};go("inventaire");return}
     const w=b.querySelector(".who2");
     x.fait=fait?{par:S.me.prenom,le:"0000-00-00 "+heureLocale()}:null;
     b.classList.toggle("done",fait);b.querySelector(".box").textContent=fait?"✓":"";
@@ -588,68 +590,87 @@ async function vTaches(){
 function entreeSuivante(box,sel){if(!box)return;box.addEventListener("keydown",e=>{if(e.key!=="Enter"||!e.target.matches(sel))return;e.preventDefault();
   const L=[...box.querySelectorAll(sel)].filter(x=>x.offsetParent!==null),i=L.indexOf(e.target),n=L[i+1];
   if(n){n.focus();try{n.select()}catch(_){}n.scrollIntoView({block:"center",behavior:"smooth"})}else e.target.blur()})}
-// Accueil : vendredi, samedi, dimanche, lundi de la semaine, avec le % compté. Puis la liste du jour, par zone ou par fournisseur.
+// Accueil : la semaine (lundi → dimanche), et pour chaque jour les fournisseurs à compter ce soir-là (réglés sur le PC, page Fournisseurs).
+// Chaque carte : % compté, « Compter », « Rien à commander ». Puis la liste du fournisseur, par zone.
 const JLONG=["","lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"];
 const invKey=j=>INV_KEY+"-"+j;
 const nb=v=>{const m=/\d+([.,]\d+)?/.exec(String(v==null?"":v));return m?+m[0].replace(",","."):null};
 const estTexte=v=>v!=null&&String(v).trim()!==""&&!/^\s*\d+([.,]\d+)?\s*$/.test(String(v));
-const invDraft=j=>{try{return JSON.parse(localStorage.getItem(invKey(j))||"{}")}catch(e){return{}}};
-const invDuJour=(r,j)=>r.articles.filter(a=>(a.jours||"").split(",").includes(String(wday(j))));
-function invPct(r,j){const L=invDuJour(r,j),c=r.comptes[j]||{},dr=invDraft(j);const n=L.filter(a=>c[a.id]!=null||(dr[a.id]!=null&&dr[a.id]!=="")).length;return{n,tot:L.length,pct:L.length?Math.round(n*100/L.length):0}}
+const invDraft=k=>{try{return JSON.parse(localStorage.getItem(invKey(k))||"{}")}catch(e){return{}}};
+const invCle=(j,fid)=>fid==="tout"?j:j+"|"+(fid||"sans");
+const invDuF=(r,fid)=>fid==="tout"?r.articles:r.articles.filter(a=>(a.fournisseurId||"")===(fid||""));
+function invPct(r,j,fid){const L=invDuF(r,fid),c=r.comptes[j]||{},dr=invDraft(invCle(j,fid));const n=L.filter(a=>c[a.id]!=null||(dr[a.id]!=null&&dr[a.id]!=="")).length;return{n,tot:L.length,pct:L.length?Math.round(n*100/L.length):0}}
 async function vInventaire(){
-  const r=await call("inventaire",sub&&sub.vendredi?{vendredi:sub.vendredi}:{});
-  try{const old=localStorage.getItem(INV_KEY);if(old&&old!=="{}"&&!localStorage.getItem(invKey(today()))){localStorage.setItem(invKey(today()),old);localStorage.setItem(invKey(today())+"-debut",localStorage.getItem(INV_KEY+"-debut")||"")}localStorage.removeItem(INV_KEY);localStorage.removeItem(INV_KEY+"-debut")}catch(e){}
-  if(sub&&sub.jour)return invListe(r,sub.jour);
-  const ven=r.vendredi,lun=r.jours[3],t=r.today;
-  const btn=j=>{const p=invPct(r,j),fut=j>t,old=diffD(j,t)>3,cur=j===t;
-    return `<button class="card invday ${cur?"cur":""}" data-j="${j}" ${p.tot?"":"disabled"}><div class="row"><b class="grow cap">${JLONG[wday(j)]} ${ddmm(j)}</b><span class="pct ${p.pct>=100?"ok":""}">${p.tot?p.pct+" %":"—"}</span></div>
-    <div class="prog"><i style="width:${p.pct}%"></i></div><div class="small muted">${p.tot?`${p.n} / ${plural(p.tot,"article")}`:"Aucun article ce jour-là"}${cur?" · aujourd'hui":fut?" · à venir":old?" · terminé":""}</div></button>`};
-  $("#app").innerHTML=`${header("Inventaire","Choisis le jour. Le % montre ce qui est déjà compté cette semaine.")}
-  <div class="row" style="justify-content:space-between;margin-bottom:10px"><button class="icon" id="iprev" aria-label="Semaine d'avant">‹</button><b>Semaine du ${ddmm(ven)} au ${ddmm(lun)}</b><button class="icon" id="inext" aria-label="Semaine d'après" ${lun>=t?"disabled":""}>›</button></div>
-  <div class="invdays">${r.jours.map(btn).join("")}</div>
+  const r=await call("inventaire",sub&&sub.lundi?{lundi:sub.lundi}:{});
+  try{localStorage.removeItem(INV_KEY);localStorage.removeItem(INV_KEY+"-debut")}catch(e){}
+  if(sub&&sub.jour)return invListe(r,sub.jour,sub.fid==null?"tout":sub.fid);
+  const t=r.today,dim=r.jours[6];
+  const carte=(j,p)=>{const x=invPct(r,j,p.fid),f=(r.faits[j]||{})[p.fid],peut=j<=t&&diffD(j,t)<=3;
+    const etat=f?(f.rien?`<span class="pill ok">✓ Rien à commander</span>`:`<span class="pill ok">✓ Fait</span>`):x.n?`<span class="pct">${x.pct} %</span>`:j<t?`<span class="pill no">Pas fait</span>`:"";
+    return `<div class="card invf ${j===t?"cur":""}"><div class="row"><b class="grow">${esc(p.nom)}</b>${etat}</div>
+      <div class="prog"><i style="width:${f&&f.rien?100:x.pct}%"></i></div>
+      <div class="small muted">${f?`${f.rien?"Vérifié":"Validé"} par ${esc(f.par)} à ${f.le.slice(11,16)} · `:""}${x.n} / ${plural(x.tot,"article")}</div>
+      <div class="row" style="gap:8px;margin-top:6px"><button class="btn small ${f?"ghost":""}" data-c="${j}" data-f="${esc(p.fid)}">${f?"Voir / recompter":x.n?"Continuer":"Compter"}</button>${peut&&!f?`<button class="btn small ghost" data-rien="${j}" data-f="${esc(p.fid)}">Rien à commander</button>`:""}</div></div>`};
+  const jour=j=>{const P=r.plan[j]||[];return `<section class="sec" ${j===t?'id="iauj"':""}><h2 class="cap">${JLONG[wday(j)]} ${ddmm(j)}${j===t?" · ce soir":""}</h2>${P.length?P.map(p=>carte(j,p)).join(""):`<div class="small muted" style="padding:2px 0 8px">Pas d'inventaire ce jour-là.</div>`}</section>`};
+  $("#app").innerHTML=`${header("Inventaire","Chaque soir à la fermeture : les fournisseurs du jour. Compte, ou « Rien à commander » si tout va bien.")}
+  <div class="row" style="justify-content:space-between;margin-bottom:10px"><button class="icon" id="iprev" aria-label="Semaine d'avant">‹</button><b>Semaine du ${ddmm(r.lundi)} au ${ddmm(dim)}</b><button class="icon" id="inext" aria-label="Semaine d'après" ${dim>=t?"disabled":""}>›</button></div>
+  ${r.jours.map(jour).join("")}
   <button class="btn ghost full" id="itout" style="margin-top:14px">Tout l'inventaire (${r.articles.length} articles), pour aujourd'hui</button>`;
   bindOut();
-  $("#app").querySelectorAll("[data-j]").forEach(b=>b.onclick=()=>{sub={vendredi:ven,jour:b.dataset.j};go("inventaire")});
-  $("#itout").onclick=()=>{sub={vendredi:ven,jour:"tout"};go("inventaire")};
-  $("#iprev").onclick=()=>{sub={vendredi:addDays(ven,-7)};go("inventaire")};
-  $("#inext").onclick=()=>{if(lun<t){sub={vendredi:addDays(ven,7)};go("inventaire")}};
+  const a=$("#iauj");if(a&&!(sub&&sub.lundi))setTimeout(()=>a.scrollIntoView({block:"start"}),50);
+  $("#app").querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>{sub={lundi:r.lundi,jour:b.dataset.c,fid:b.dataset.f};go("inventaire")});
+  $("#app").querySelectorAll("[data-rien]").forEach(b=>b.onclick=()=>rienACommander(r,b.dataset.rien,b.dataset.f));
+  $("#itout").onclick=()=>{sub={lundi:r.lundi,jour:t,fid:"tout"};go("inventaire")};
+  $("#iprev").onclick=()=>{sub={lundi:addDays(r.lundi,-7)};go("inventaire")};
+  $("#inext").onclick=()=>{if(dim<t){sub={lundi:addDays(r.lundi,7)};go("inventaire")}};
 }
-function invListe(r,jour){
-  const tout=jour==="tout", j=tout?r.today:jour, t=r.today;
+function rienACommander(r,j,fid){
+  const p=(r.plan[j]||[]).find(x=>x.fid===fid)||{nom:"ce fournisseur"};
+  confirmSheet(`Rien à commander chez ${p.nom} ?`,"Tu as vérifié d'un coup d'œil : il y a assez de tout. L'inventaire du jour est noté comme fait.","Oui, rien à commander",async()=>{
+    await act(()=>call("inventaireValider",{rien:true,fournisseurId:fid,pour:j}),"Noté : rien à commander");
+    try{localStorage.removeItem(invKey(invCle(j,fid)));localStorage.removeItem(invKey(invCle(j,fid))+"-debut")}catch(e){}
+    sub={lundi:r.lundi};go("inventaire");
+  });
+}
+function invListe(r,jour,fid){
+  const tout=fid==="tout", j=jour, t=r.today;
   const peut=j<=t&&diffD(j,t)<=3;
-  const base=tout?r.articles:invDuJour(r,j), deja=(tout?{}:r.comptes[j])||{};
-  const grp=sub.grp||"zone", q=(sub.q||"").toLowerCase();
+  const nomF=tout?"":(((r.plan[j]||[]).find(x=>x.fid===fid)||{}).nom||(fid?((r.articles.find(a=>a.fournisseurId===fid)||{}).fournisseur||"Fournisseur"):"Sans fournisseur"));
+  const base=invDuF(r,fid), deja=(tout?{}:r.comptes[j])||{}, fait0=!tout&&(r.faits[j]||{})[fid];
+  const grp=tout?(sub.grp||"zone"):"zone", q=(sub.q||"").toLowerCase();
   let clavier="decimal";try{clavier=localStorage.getItem(INV_KEY+"-clavier")||"decimal"}catch(e){}
-  const K=invKey(j);
-  let draft=invDraft(j);
+  const K=invKey(invCle(j,fid));
+  let draft=invDraft(invCle(j,fid));
   const save=()=>{try{localStorage.setItem(K,JSON.stringify(draft));const db=+localStorage.getItem(K+"-debut")||0;if(!db||Date.now()-db>12*3600e3)localStorage.setItem(K+"-debut",String(Date.now()))}catch(e){}};
   const debutMs=()=>{try{return +localStorage.getItem(K+"-debut")||0}catch(e){return 0}};
   const vis=base.filter(a=>!q||a.nom.toLowerCase().includes(q)||a.fournisseur.toLowerCase().includes(q)||(a.zone||"").toLowerCase().includes(q));
   const counted=()=>Object.keys(draft).filter(k=>draft[k]!==""&&draft[k]!=null).length;
   const fait=()=>base.filter(a=>deja[a.id]!=null||(draft[a.id]!=null&&draft[a.id]!=="")).length;
-  // sections : par zone ou par fournisseur ; les articles sans fournisseur toujours à part, à la fin
-  const avec=vis.filter(a=>a.fournisseur), sans=vis.filter(a=>!a.fournisseur);
+  const avec=vis.filter(a=>a.fournisseur||!tout), sans=tout?vis.filter(a=>!a.fournisseur):[];
   const cle=a=>grp==="fournisseur"?a.fournisseur:(a.zone||"Autre");
   const secs=[...new Set(avec.map(cle))].sort((x,y)=>x.localeCompare(y,"fr")).map(k=>[k,avec.filter(a=>cle(a)===k)]);
   if(sans.length)secs.push(["Sans fournisseur",sans,true]);
   const row=a=>{const v=draft[a.id]==null?"":draft[a.id],n=nb(v),low=n!=null&&a.min!==""&&n<=+a.min,ok=deja[a.id]!=null;
-    const info=[grp==="fournisseur"?a.zone:a.fournisseur,a.cartonnage?"📦 "+a.cartonnage:"",a.unite&&a.unite!==a.cartonnage?a.unite:"",a.cible!==""?"avoir "+a.cible:"",ok?`<b class="okc">✓ compté : ${deja[a.id]}</b>`:a.dernier?`dernier : ${a.dernier.texte||a.dernier.qte} le ${ddmm(a.dernier.date)}`:""].filter(Boolean);
+    const info=[grp==="fournisseur"?a.zone:tout?a.fournisseur:"",a.cartonnage?"📦 "+a.cartonnage:"",a.unite&&a.unite!==a.cartonnage?a.unite:"",a.cible!==""?"avoir "+a.cible:"",ok?`<b class="okc">✓ compté : ${deja[a.id]}</b>`:a.dernier?`dernier : ${a.dernier.texte||a.dernier.qte} le ${ddmm(a.dernier.date)}`:""].filter(Boolean);
     return `<div class="inv ${low?"low":""} ${ok&&v===""?"vu":""}" data-a="${esc(a.id)}"><div class="t"><div class="a">${esc(a.nom)}</div><div class="b">${info.map(x=>x.startsWith("<b")?x:esc(x)).join(" · ")}</div><div class="b txt">${estTexte(v)?"✎ "+esc(v):""}</div></div>
     ${peut?`<div class="step"><button data-d="-1" aria-label="Moins">−</button><input inputmode="${clavier}" enterkeyhint="next" maxlength="60" value="${esc(v)}" placeholder="${ok?esc(deja[a.id]):""}" aria-label="Quantité ${esc(a.nom)}"><button data-d="1" aria-label="Plus">+</button></div>`:""}</div>`};
   const p0=fait();
-  $("#app").innerHTML=`${header(`<button class="icon" id="iback" aria-label="Retour" style="display:inline-grid;vertical-align:middle;margin-left:-8px">‹</button>${tout?"Tout l'inventaire":"Inventaire du "+JLONG[wday(j)]+" "+ddmm(j)}`,peut?"Compte ce qu'il reste. Laisse vide ce que tu ne comptes pas.":j>t?"Ce jour n'est pas encore arrivé : la liste est là pour voir.":"Ce jour est passé : la liste est là pour voir.")}
+  $("#app").innerHTML=`${header(`<button class="icon" id="iback" aria-label="Retour" style="display:inline-grid;vertical-align:middle;margin-left:-8px">‹</button>${tout?"Tout l'inventaire":esc(nomF)+" · "+JLONG[wday(j)]+" "+ddmm(j)}`,peut?"Compte ce qu'il reste. Laisse vide ce que tu ne comptes pas.":j>t?"Ce jour n'est pas encore arrivé : la liste est là pour voir.":"Ce jour est passé : la liste est là pour voir.")}
+  ${fait0?`<div class="card soft small">✓ ${fait0.rien?"Rien à commander, noté":"Inventaire validé"} par ${esc(fait0.par)} à ${fait0.le.slice(11,16)}. Tu peux recompter si besoin.</div>`:""}
   ${tout?"":`<div class="row small" style="margin-bottom:6px"><span class="grow"><b id="ipn">${p0}</b> / ${base.length} comptés</span><b id="ipp">${base.length?Math.round(p0*100/base.length):0} %</b></div><div class="prog" style="margin-bottom:12px"><i id="ipb" style="width:${base.length?Math.round(p0*100/base.length):0}%"></i></div>`}
-  <div class="chips"><button class="chip" data-g="zone" aria-pressed="${grp==="zone"}">Par zone</button><button class="chip" data-g="fournisseur" aria-pressed="${grp==="fournisseur"}">Par fournisseur</button>${peut?`<button class="chip" id="iclav" title="Pour écrire « 2 et 1 entamé », « 3 cartons »…">${clavier==="text"?"⌨️ Clavier : texte":"🔢 Clavier : chiffres"}</button>`:""}</div>
-  <input id="iq" type="search" placeholder="Chercher un article, une zone, un fournisseur…" value="${esc(sub.q||"")}">
+  ${peut&&!tout&&!fait0?`<button class="btn ghost full" id="irien" style="margin-bottom:10px">✓ Rien à commander (tout est en quantité suffisante)</button>`:""}
+  <div class="chips">${tout?`<button class="chip" data-g="zone" aria-pressed="${grp==="zone"}">Par zone</button><button class="chip" data-g="fournisseur" aria-pressed="${grp==="fournisseur"}">Par fournisseur</button>`:""}${peut?`<button class="chip" id="iclav" title="Pour écrire « 2 et 1 entamé », « 3 cartons »…">${clavier==="text"?"⌨️ Clavier : texte":"🔢 Clavier : chiffres"}</button>`:""}</div>
+  <input id="iq" type="search" placeholder="Chercher un article, une zone…" value="${esc(sub.q||"")}">
   <div id="il">${secs.map(([k,L,apart])=>`<section class="sec"><h2 ${apart?'style="color:var(--bad)"':""}>${esc(k)} <span class="muted small">${L.filter(a=>deja[a.id]!=null).length}/${L.length}</span></h2><div class="list">${L.map(row).join("")}</div></section>`).join("")||`<div class="empty">Aucun article</div>`}</div>
   <div style="height:60px"></div>
   ${peut?`<div class="bar"><button class="btn" id="ival">Valider l'inventaire (${counted()})</button></div>`:""}`;
   bindOut();
-  $("#iback").onclick=()=>{sub={vendredi:r.vendredi};go("inventaire")};
+  $("#iback").onclick=()=>{sub={lundi:r.lundi};go("inventaire")};
   const setSub=o=>{sub=Object.assign({},sub,o);go("inventaire")};
   $("#app").querySelectorAll("[data-g]").forEach(b=>b.onclick=()=>setSub({grp:b.dataset.g}));
   let qt;$("#iq").oninput=e=>{clearTimeout(qt);qt=setTimeout(()=>{setSub({q:e.target.value});setTimeout(()=>{const i=$("#iq");if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}},50)},450)};
   if(!peut)return;
+  const ir=$("#irien");if(ir)ir.onclick=()=>rienACommander(r,j,fid);
   $("#iclav").onclick=()=>{try{localStorage.setItem(INV_KEY+"-clavier",clavier==="text"?"decimal":"text")}catch(e){}go("inventaire")};
   const upd=()=>{$("#ival").textContent=`Valider l'inventaire (${counted()})`;if(!tout&&base.length){const n=fait(),pc=Math.round(n*100/base.length);$("#ipn").textContent=n;$("#ipp").textContent=pc+" %";$("#ipb").style.width=pc+"%"}};
   const il=$("#il");
@@ -660,11 +681,11 @@ function invListe(r,jour){
   function mark(row){const a=r.articles.find(x=>x.id===row.dataset.a),v=draft[a.id],n=nb(v);row.classList.toggle("low",n!=null&&a.min!==""&&n<=+a.min);const t=row.querySelector(".txt");if(t)t.textContent=estTexte(v)?"✎ "+v:""}
   $("#ival").onclick=()=>{
     const lignes=Object.keys(draft).filter(k=>draft[k]!==""&&draft[k]!=null).map(k=>({articleId:k,qte:draft[k]}));
-    if(!lignes.length){toast("Compte au moins un article",true);return}
-    confirmSheet("Valider l'inventaire ?",plural(lignes.length,"article")+" compté"+(lignes.length>1?"s":"")+(tout||j===t?".":" pour "+JLONG[wday(j)]+" "+ddmm(j)+"."),"Valider",async()=>{
-      const res=await act(()=>call("inventaireValider",{lignes,debutMs:debutMs(),pour:j}));
+    if(!lignes.length){toast(tout?"Compte au moins un article":"Compte au moins un article, ou « Rien à commander »",true);return}
+    confirmSheet("Valider l'inventaire ?",plural(lignes.length,"article")+" compté"+(lignes.length>1?"s":"")+(tout?".":` chez ${nomF}`+(j===t?".":" pour "+JLONG[wday(j)]+" "+ddmm(j)+".")),"Valider",async()=>{
+      const res=await act(()=>call("inventaireValider",Object.assign({lignes,debutMs:debutMs(),pour:j},tout?{}:{fournisseurId:fid})));
       draft={};try{localStorage.removeItem(K);localStorage.removeItem(K+"-debut")}catch(e){}
-      open(`<h3>Inventaire enregistré ✓</h3>${res.aCommander.length?`<p class="hint">À commander (David est prévenu) :</p>${res.aCommander.map(f=>`<div class="card"><b>${esc(f.fournisseur)}</b>${f.lignes.map(l=>`<div class="row small"><span class="grow">${esc(l.nom)}</span><span class="muted">reste ${l.stock}</span><b>+${l.qte}</b></div>`).join("")}</div>`).join("")}`:`<p class="hint">Rien sous le minimum. Merci !</p>`}<button class="btn full" id="iok">OK</button>`,()=>{$("#iok").onclick=()=>{close();sub={vendredi:r.vendredi};go("inventaire")}});
+      open(`<h3>Inventaire enregistré ✓</h3>${res.aCommander.length?`<p class="hint">À commander (David est prévenu) :</p>${res.aCommander.map(f=>`<div class="card"><b>${esc(f.fournisseur)}</b>${f.lignes.map(l=>`<div class="row small"><span class="grow">${esc(l.nom)}</span><span class="muted">reste ${l.stock}</span><b>+${l.qte}${l.unite==="g"?" g":""}</b></div>`).join("")}</div>`).join("")}`:`<p class="hint">Rien sous le minimum. Merci !</p>`}<button class="btn full" id="iok">OK</button>`,()=>{$("#iok").onclick=()=>{close();sub={lundi:r.lundi};go("inventaire")}});
     });
   };
 }

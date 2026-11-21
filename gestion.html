@@ -547,7 +547,7 @@ async function pFournisseurs(){
     <td><select data-f="type">${[["marchandise","Marchandise"],["frais","Frais généraux"],["à classer","À classer"]].map(([v,l])=>`<option value="${v}" ${(f.type===v||(v==="à classer"&&!["marchandise","frais"].includes(f.type)))?"selected":""}>${l}</option>`).join("")}</select></td>
     <td><select data-f="canal">${[["","—"],["email","Email"],["sms","SMS"],["whatsapp","WhatsApp"],["telephone","Téléphone"]].map(([v,l])=>`<option value="${v}" ${f.canal===v?"selected":""}>${l}</option>`).join("")}</select></td>
     <td><div class="stack"><input data-f="contact" value="${esc(f.contact||"")}" placeholder="prénom du contact (Bonjour …)"><textarea data-auto data-f="email" rows="1" placeholder="email">${esc(f.email)}</textarea><input data-f="telephone" value="${esc(f.telephone)}" placeholder="téléphone"></div></td>
-    <td><div class="stack"><textarea data-auto data-f="jourCommande" rows="1" placeholder="jour de commande">${esc(f.jourCommande)}</textarea><input data-f="delai" value="${esc(f.delai)}" placeholder="délai, ex. 2 jours"></div></td>
+    <td><div class="stack"><textarea data-auto data-f="jourCommande" rows="1" placeholder="jour de commande">${esc(f.jourCommande)}</textarea><input data-f="delai" value="${esc(f.delai)}" placeholder="délai, ex. 2 jours"><div class="small" title="Jours d'inventaire (le soir, à la fermeture)">📋 ${["L","M","M","J","V","S","D"].map((j,i)=>`<label style="display:inline-flex;flex-direction:column;align-items:center;font-size:.7rem;color:var(--muted);margin-right:1px">${j}<input type="checkbox" data-jinv="${i+1}" ${String(f.joursInv||"").split(",").includes(String(i+1))?"checked":""} style="width:auto;margin:0"></label>`).join("")}</div></div></td>
     <td class="small" style="overflow-wrap:anywhere">${rythme(f)}</td>
     <td style="text-align:center">${r.nbArticles[f.id]?`<button class="btn small ghost" data-arts="${esc(f.id)}" title="Voir ses articles">${r.nbArticles[f.id]}</button>`:`<span class="muted">0</span>`}</td>
     <td><textarea data-auto data-f="note" rows="1" placeholder="note">${esc(f.note)}</textarea></td></tr>`).join("");
@@ -555,13 +555,16 @@ async function pFournisseurs(){
   <div class="tools"><input id="q" placeholder="🔍 Chercher…" value="${esc(F.q)}" style="width:220px">
     <div class="chips">${[["marchandise","Marchandise"],["frais","Frais généraux"],["a_classer","À classer"],["tous","Tous"]].map(([k,l])=>`<button class="chip" data-type="${k}" aria-pressed="${F.type===k}">${l}</button>`).join("")}</div>
     <span class="muted small">${vis.length} fournisseur${vis.length>1?"s":""}</span></div>
-  <div class="scrollx"><table class="t" style="min-width:1080px"><colgroup><col style="width:12%"><col style="width:142px"><col style="width:116px"><col style="width:15%"><col style="width:14%"><col style="width:146px"><col style="width:72px"><col></colgroup><thead><tr><th>Nom</th><th>Type</th><th>Commande par</th><th>Email · téléphone</th><th>Jour de commande · délai de livraison</th><th>Rythme (factures)</th><th>Articles</th><th>Note</th></tr></thead><tbody id="tb">${rows||`<tr><td colspan="8" class="muted" style="padding:20px">Aucun fournisseur</td></tr>`}</tbody></table></div>
-  <p class="muted small">Seuls les fournisseurs « Marchandise » déclenchent l'alerte « pas commandé depuis longtemps ». Le rythme vient des factures (CLV - FACTURES) et des commandes envoyées. Le délai de livraison sert au contrôle des livraisons du matin.</p>`;
+  <div class="scrollx"><table class="t" style="min-width:1080px"><colgroup><col style="width:12%"><col style="width:142px"><col style="width:116px"><col style="width:15%"><col style="width:14%"><col style="width:146px"><col style="width:72px"><col></colgroup><thead><tr><th>Nom</th><th>Type</th><th>Commande par</th><th>Email · téléphone</th><th>Jour de commande · délai · 📋 jours d'inventaire</th><th>Rythme (factures)</th><th>Articles</th><th>Note</th></tr></thead><tbody id="tb">${rows||`<tr><td colspan="8" class="muted" style="padding:20px">Aucun fournisseur</td></tr>`}</tbody></table></div>
+  <p class="muted small">Seuls les fournisseurs « Marchandise » déclenchent l'alerte « pas commandé depuis longtemps ». Le rythme vient des factures (CLV - FACTURES) et des commandes envoyées. Le délai de livraison sert au contrôle des livraisons du matin. 📋 Jours d'inventaire : les soirs où ses articles sont comptés à la fermeture (tâche « Inventaire … » avec rappel) ; les articles sans fournisseur sont comptés le lundi.</p>`;
   autoH($("#main"));
   let qt;$("#q").oninput=e=>{clearTimeout(qt);qt=setTimeout(()=>{F.q=e.target.value;pFournisseurs().then(()=>{const i=$("#q");i.focus();i.setSelectionRange(i.value.length,i.value.length)})},300)};
   $("#main").querySelectorAll("[data-type]").forEach(b=>b.onclick=()=>{F.type=b.dataset.type;pFournisseurs()});
   $("#main").querySelectorAll("[data-arts]").forEach(b=>b.onclick=()=>{Object.assign(A,{fourn:b.dataset.arts,zone:"",q:"",seuil:"",etat:"actifs"});view="articles";shell()});
-  $("#tb").addEventListener("change",async e=>{const tr=e.target.closest("tr[data-id]"),f=e.target.dataset.f;if(!tr||!f)return;
+  $("#tb").addEventListener("change",async e=>{const tr=e.target.closest("tr[data-id]");if(!tr)return;
+    if(e.target.dataset.jinv){const v=[...tr.querySelectorAll("[data-jinv]")].filter(x=>x.checked).map(x=>x.dataset.jinv).join(",");
+      try{await call("fournisseurSave",{id:tr.dataset.id,joursInv:v});const s=$("#saved");if(s){s.textContent="✓ Jours d'inventaire enregistrés";setTimeout(()=>{if($("#saved"))$("#saved").textContent=""},1500)}}catch(err){toast(err.message,true);pFournisseurs()}return}
+    const f=e.target.dataset.f;if(!f)return;
     try{await call("fournisseurSave",{id:tr.dataset.id,[f]:e.target.value.trim()});const s=$("#saved");if(s){s.textContent="✓ Enregistré";setTimeout(()=>{if($("#saved"))$("#saved").textContent=""},1500)}if(f==="type")pFournisseurs()}catch(err){toast(err.message,true);pFournisseurs()}});
 }
 
@@ -789,7 +792,7 @@ async function pCommandes(garder){
   // + Article de l'inventaire : un article déjà compté (sans fournisseur ou chez un autre) passe chez ce fournisseur ; ses jours d'inventaire ne bougent pas
   const ci=$("#c-inv");if(ci)ci.onclick=()=>{const fn=id=>(r.fournisseurs.find(x=>x.id===id)||{}).nom||"";
     const autres=r.articles.filter(a=>a.fournisseurId!==c.fournisseurId).sort((a,b)=>(a.fournisseurId?1:0)-(b.fournisseurId?1:0)||a.nom.localeCompare(b.nom,"fr"));
-    dialog(`<h3>Ajouter à la liste ${esc(f.nom)}</h3><p class="muted small">Articles déjà dans les inventaires. Les « sans fournisseur » d'abord. Il garde ses jours d'inventaire.</p>
+    dialog(`<h3>Ajouter à la liste ${esc(f.nom)}</h3><p class="muted small">Articles déjà dans les inventaires. Les « sans fournisseur » d'abord. Il sera compté les soirs d'inventaire ${esc(f.nom)}.</p>
     <input id="ai-q" placeholder="🔍 Chercher…" style="width:100%;margin-bottom:8px">
     <div style="max-height:55vh;overflow:auto"><table class="t"><tbody id="ai-l"></tbody></table></div>
     <div class="acts"><button class="btn ghost" data-x>Fermer</button></div>`,(d,close)=>{
@@ -805,7 +808,7 @@ async function pCommandes(garder){
   const nw=$("#c-new");if(nw)nw.onclick=()=>{const zones=[...new Set(r.articles.map(a=>a.zone).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"fr"));
     const libre=($("#c-libre")||{}).value||"";
     dialog(`<h3>Nouvel article ${esc(f.nom)}</h3>
-    <p class="muted small">Il sera compté dans les inventaires aux mêmes jours que les autres articles ${esc(f.nom)}.</p>
+    <p class="muted small">Il sera compté les soirs d'inventaire ${esc(f.nom)} (page Fournisseurs).</p>
     <div class="g2"><label class="f">Nom (comme dans l'inventaire)<input id="na-nom" value="${esc(libre.trim())}"></label><label class="f">Nom catalogue fournisseur (pour l'email)<input id="na-ref" placeholder="facultatif"></label></div>
     <div class="g3"><label class="f">Zone<input id="na-zone" list="na-zones" placeholder="ex. Frigo n°2"><datalist id="na-zones">${zones.map(z=>`<option value="${esc(z)}">`).join("")}</datalist></label>
       <label class="f">Cartonnage<select id="na-cart"><option value="">—</option>${["unité","kg","paquet","carton"].map(x=>`<option>${x}</option>`).join("")}</select></label>
