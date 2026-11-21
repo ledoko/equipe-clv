@@ -232,7 +232,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-21b";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-21c";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -595,6 +595,8 @@ function entreeSuivante(box,sel){if(!box)return;box.addEventListener("keydown",e
 // Chaque carte : % compté, « Compter », « Rien à commander ». Puis la liste du fournisseur, par zone.
 const JLONG=["","lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"];
 const invKey=j=>INV_KEY+"-"+j;
+// on peut compter : aujourd'hui ou les 3 derniers jours ; un inventaire du matin, dès la veille à midi
+const invPeut=(r,j,p)=>{const t=r.today;if(j<=t&&diffD(j,t)<=3)return true;return !!p&&p.creneau==="matin"&&j===addDays(t,1)&&heureLocale()>="12:00"};
 const nb=v=>{const m=/\d+([.,]\d+)?/.exec(String(v==null?"":v));return m?+m[0].replace(",","."):null};
 const estTexte=v=>v!=null&&String(v).trim()!==""&&!/^\s*\d+([.,]\d+)?\s*$/.test(String(v));
 const invDraft=k=>{try{return JSON.parse(localStorage.getItem(invKey(k))||"{}")}catch(e){return{}}};
@@ -612,17 +614,20 @@ async function vInventaire(){
   const resteJ=d=>(r.plan[d]||[]).filter(p=>!(r.faits[d]||{})[p.fid]).length;
   const strip=r.jours.map(d=>{const P=r.plan[d]||[],rest=resteJ(d);
     return `<button class="invj ${d===j?"sel":""} ${d===t?"auj":""}" data-v="${d}"><span class="cap">${JLONG[wday(d)].slice(0,3)}</span><b>${d.slice(8,10)}</b><span class="dot">${P.length?(rest?rest:"✓"):"·"}</span></button>`}).join("");
-  const carte=p=>{const {x,f}=etatF(j,p),peut=j<=t&&diffD(j,t)<=3;
+  const carte=(p,jj)=>{jj=jj||j;const {x,f}=etatF(jj,p),peut=invPeut(r,jj,p);
     const etat=f?(f.rien?`<span class="pill ok">✓ Rien à commander</span>`:`<span class="pill ok">✓ Fait</span>`):x.n?`<span class="pct">${x.pct} %</span>`:j<t?`<span class="pill no">Pas fait</span>`:"";
     return `<div class="card invf ${j===t&&!f?"cur":""}"><div class="row"><b class="grow">${esc(p.nom)}</b>${etat}</div>
       <div class="prog"><i style="width:${f&&f.rien?100:x.pct}%"></i></div>
       <div class="small muted">${f?`${f.rien?"Vérifié":"Validé"} par ${esc(f.par)} à ${f.le.slice(11,16)} · `:""}${x.n} / ${plural(x.tot,"article")}</div>
-      <div class="row" style="gap:8px;margin-top:6px"><button class="btn small ${f?"ghost":""}" data-c="${j}" data-f="${esc(p.fid)}">${f?"Voir / recompter":x.n?"Continuer":"Compter"}</button>${peut&&!f?`<button class="btn small ghost" data-rien="${j}" data-f="${esc(p.fid)}">Rien à commander</button>`:""}</div></div>`};
-  const P=r.plan[j]||[], matin=P.filter(p=>p.creneau==="matin"), soir=P.filter(p=>p.creneau!=="matin");
+      <div class="row" style="gap:8px;margin-top:6px"><button class="btn small ${f?"ghost":""}" data-c="${jj}" data-f="${esc(p.fid)}">${f?"Voir / recompter":x.n?"Continuer":"Compter"}</button>${peut&&!f?`<button class="btn small ghost" data-rien="${jj}" data-f="${esc(p.fid)}">Rien à commander</button>`:""}</div></div>`};
+  const P=r.plan[j]||[], matin=P.filter(p=>p.creneau==="matin"), journee=P.filter(p=>p.creneau==="journee"), soir=P.filter(p=>p.creneau==="soir");
+  // aujourd'hui après midi : les inventaires de demain matin peuvent déjà se faire
+  const dem=addDays(j,1), demP=j===t&&heureLocale()>="12:00"?((r.plan[dem]||[]).filter(p=>p.creneau==="matin"&&!(r.faits[dem]||{})[p.fid])):[];
   const avants=[...new Set(matin.map(p=>p.avant))].sort();
-  const tranche=(titre,L)=>L.length?`<section class="sec"><h2>${titre}</h2>${L.map(carte).join("")}</section>`:"";
-  const corps=P.length?avants.map(a=>tranche(`🌅 Matin · à finir avant ${a.replace(":","h")}`,matin.filter(p=>p.avant===a))).join("")+tranche("🌙 Soir · à la fermeture",soir)
-    :`<div class="empty">Pas d'inventaire ${j===t?"aujourd'hui":"ce jour-là"}.${wday(j)===7?" Le dimanche, on souffle 🙂":""}</div>`;
+  const tranche=(titre,L,jj)=>L.length?`<section class="sec"><h2>${titre}</h2>${L.map(p=>carte(p,jj)).join("")}</section>`:"";
+  const corps=(P.length?avants.map(a=>tranche(`🌅 Matin · à finir avant ${a.replace(":","h")}`,matin.filter(p=>p.avant===a))).join("")+tranche("☀️ Dans la journée",journee)+tranche("🌙 Soir · à la fermeture",soir)
+    :`<div class="empty">Pas d'inventaire ${j===t?"aujourd'hui":"ce jour-là"}.${wday(j)===7?" Le dimanche, on souffle 🙂":""}</div>`)
+    +tranche(`⏩ Pour demain matin (${JLONG[wday(dem)]}) · peut se faire dès maintenant`,demP,dem);
   $("#app").innerHTML=`${header("Inventaire","Les inventaires du jour, par moment de la journée. Compte, ou « Rien à commander » si tout va bien.")}
   <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px"><button class="icon" id="iprev" aria-label="Jour d'avant">‹</button><b class="cap">${JLONG[wday(j)]} ${ddmm(j)}${j===t?" · aujourd'hui":""}</b><button class="icon" id="inext" aria-label="Jour d'après">›</button></div>
   <div class="invweek">${strip}</div>
@@ -647,7 +652,7 @@ function rienACommander(r,j,fid){
 }
 function invListe(r,jour,fid){
   const tout=fid==="tout", j=jour, t=r.today;
-  const peut=j<=t&&diffD(j,t)<=3;
+  const peut=tout?(j<=t&&diffD(j,t)<=3):invPeut(r,j,(r.plan[j]||[]).find(x=>x.fid===fid));
   const nomF=tout?"":(((r.plan[j]||[]).find(x=>x.fid===fid)||{}).nom||(fid?((r.articles.find(a=>a.fournisseurId===fid)||{}).fournisseur||"Fournisseur"):"Sans fournisseur"));
   const base=invDuF(r,fid), deja=(tout?{}:r.comptes[j])||{}, fait0=!tout&&(r.faits[j]||{})[fid];
   const grp=tout?(sub.grp||"zone"):"zone", q=(sub.q||"").toLowerCase();
