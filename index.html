@@ -173,6 +173,7 @@ h2{font-family:var(--display);font-weight:600;font-size:1.1rem;margin:0}
 .invday{display:flex;flex-direction:column;gap:8px;text-align:left;border:1.5px solid var(--line);font:inherit;color:inherit}
 .invday.cur{border-color:var(--lagoon)}
 .invf{border:1.5px solid var(--line);display:flex;flex-direction:column;gap:6px}.invf.cur{border-color:var(--lagoon)}
+.mgrp{display:flex;align-items:center;gap:8px}.mgrp .hr{font-weight:500;color:var(--muted);font-size:.85em;text-transform:none;letter-spacing:0}.mgrp .cnt{font-size:.85em;color:var(--muted)}.mgrp .cnt.ok{color:var(--ok)}.mgrp.now{color:var(--lagoon)}
 .invweek{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:12px}.invj{display:flex;flex-direction:column;align-items:center;gap:1px;padding:6px 0;border:1.5px solid var(--line);border-radius:12px;background:var(--surface);color:inherit;font:inherit;font-size:.75rem}.invj b{font-size:1rem}.invj .dot{font-size:.7rem;color:var(--muted)}.invj.auj{border-color:var(--lagoon)}.invj.sel{background:var(--lagoon);border-color:var(--lagoon);color:#fff}.invj.sel .dot{color:#fff}
 .invday:disabled{opacity:.5}
 .invday .pct{font-family:var(--display);font-weight:800;font-size:1.3rem}
@@ -232,7 +233,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-21c";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-22a";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -542,14 +543,19 @@ async function semaineTypeSheet(){
 // ---------- tâches ----------
 async function vTaches(){
   const d=sub&&sub.date||today(), filtre=sub&&sub.filtre||"tout", cacher=!!(sub&&sub.cacher);
-  const r=await call("taches",{date:d});
+  const [r,sem]=await Promise.all([call("taches",{date:d}),call("tachesSemaine",{date:d}).catch(()=>null)]);
   const list=r.taches.filter(x=>!(vueEmp&&x.qui==="Gérance"));
   const moments=[...new Set(list.map(x=>x.moment))];
   const vis=list.filter(x=>(filtre==="tout"||x.moment===filtre)&&!(cacher&&x.fait));
   const n=list.length,f=list.filter(x=>x.fait).length;
-  let html="",curM=null,curS=null;
+  // rangées par moment de la journée, avec la plage horaire ; le moment en cours est mis en avant (aujourd'hui)
+  const PL=r.plages||{},EMO={"Ouverture":"🌅","Matin":"☕","Pré-service":"🍽️","Journée":"☀️","Post-service":"🧽","Après-midi":"🕒","Nettoyage":"🧹","Fermeture":"🌙"};
+  const hNow=heureLocale(),enCours=mo=>d===today()&&PL[mo]&&PL[mo][0]<=hNow&&hNow<PL[mo][1];
+  const parM={};list.forEach(x=>{const k=x.moment||"Autres";(parM[k]=parM[k]||[0,0])[0]++;if(x.fait)parM[k][1]++});
+  let html="",curM=null,curS=null,premierEnCours=null;
   vis.forEach(x=>{
-    if(x.moment!==curM){curM=x.moment;curS=null;html+=`<div class="grp">${esc(x.moment||"Autres")}</div>`}
+    if(x.moment!==curM){curM=x.moment;curS=null;const k=x.moment||"Autres",c=parM[k]||[0,0],ec=enCours(k);if(ec&&!premierEnCours)premierEnCours=k;
+      html+=`<div class="grp mgrp ${ec?"now":""}" ${ec&&premierEnCours===k?'id="tnow"':""}><span class="grow">${EMO[k]||"•"} ${esc(k)}${PL[k]?` <span class="hr">${PL[k][0].replace(":","h")} → ${PL[k][1].replace(":","h")}</span>`:""}${ec?` <span class="pill info">en ce moment</span>`:""}</span><span class="cnt ${c[1]===c[0]?"ok":""}">${c[1]}/${c[0]}</span></div>`}
     if(x.section&&x.section!=="Semaine type"&&x.section!==curS){curS=x.section;html+=`<div class="sgrp">${esc(x.section)}</div>`}
     const badge=x.freq==="semaine"?`<span class="pill info">Hebdo</span>`:x.freq==="mois"?`<span class="pill info">Mensuel</span>`:"";
     const late=x.retard&&!x.fait?`<span class="pill no">Prévu ${jourCourt(x.echeance)}</span>`:"";
@@ -557,8 +563,11 @@ async function vTaches(){
     const meta=[badge,late,String(x.type).startsWith("comptage")&&!x.fait?`<span class="pill info">📋 Ouvre le comptage</span>`:"",x.type==="inventaire"&&!x.fait?`<span class="pill info">📦 Ouvre l'inventaire</span>`:"",x.recette?`<span class="pill info recbtn" data-rec="${esc(x.id)}" role="button">📖 Recette</span>`:"",x.qui?`<span>· ${esc(x.qui)}</span>`:"",who].filter(Boolean).join("");
     html+=`<button class="task ${x.fait?"done":""}" data-t="${esc(x.id)}" ${d>today()?"disabled":""}><span class="box">${x.fait?"✓":""}</span><span class="grow"><div class="tt">${esc(x.titre)}</div>${x.note?`<div class="nn">${esc(x.note)}</div>`:""}<div class="meta">${meta}</div></span></button>`;
   });
+  const strip=sem?Object.keys(sem.jours).map(j=>{const x=sem.jours[j],rest=x?x.n-x.faites:null;
+    return `<button class="invj ${j===d?"sel":""} ${j===today()?"auj":""}" data-v="${j}" ${x?"":"disabled"}><span class="cap">${["","lun","mar","mer","jeu","ven","sam","dim"][wday(j)]}</span><b>${j.slice(8,10)}</b><span class="dot">${x?(rest?rest:"✓"):"·"}</span></button>`}).join(""):"";
   $("#app").innerHTML=`${header("Tâches")}
   <div class="nav"><button class="icon" id="dprev" aria-label="Jour précédent">‹</button><b class="cap">${d===today()?"Aujourd'hui · ":""}${jourCourt(d)} ${dt(d,{month:"short"})}</b><button class="icon" id="dnext" aria-label="Jour suivant" ${d>=today()?"disabled":""}>›</button></div>
+  ${strip?`<div class="invweek">${strip}</div>`:""}
   <div class="card"><div class="sechead"><h2>${f} / ${n} faites</h2><label class="small muted row" style="gap:6px"><input type="checkbox" id="cacher" style="width:auto" ${cacher?"checked":""}> Cacher les faites</label></div><div class="prog"><i style="width:${n?f/n*100:0}%"></i></div></div>
   <div class="chips"><button class="chip" data-f="tout" aria-pressed="${filtre==="tout"}">Tout</button>${moments.map(m=>`<button class="chip" data-f="${esc(m)}" aria-pressed="${filtre===m}">${esc(m)}</button>`).join("")}</div>
   <div class="list" id="tl">${html||`<div class="empty">${cacher&&n?"Tout est fait 🎉":"Aucune tâche"}</div>`}</div>
@@ -569,6 +578,8 @@ async function vTaches(){
   const cpt=$("#compter");if(cpt)cpt.onclick=()=>choixComptage();
   const setSub=o=>{sub=Object.assign({date:d,filtre,cacher},o);go("taches")};
   $("#dprev").onclick=()=>setSub({date:addDays(d,-1)});
+  $("#app").querySelectorAll(".invweek [data-v]").forEach(b=>b.onclick=()=>setSub({date:b.dataset.v}));
+  const tn=$("#tnow");if(tn&&filtre==="tout"&&!(sub&&sub.noscroll))setTimeout(()=>tn.scrollIntoView({block:"start",behavior:"smooth"}),80);
   $("#dnext").onclick=()=>{if(d<today())setSub({date:addDays(d,1)})};
   $("#cacher").onchange=e=>setSub({cacher:e.target.checked});
   $("#app").querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>setSub({filtre:b.dataset.f}));

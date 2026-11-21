@@ -243,7 +243,7 @@ async function pTaches(){
       <td><textarea data-auto data-f="section" rows="1" placeholder="rubrique">${esc(t.section)}</textarea></td>
       <td style="text-align:center"><input type="checkbox" data-f="actif" ${t.actif!=="non"?"checked":""} style="width:auto" title="Active"></td></tr>`;
   });
-  $("#main").innerHTML=`<div class="top"><h1 class="grow">Tâches</h1><span class="saved" id="saved"></span><button class="btn" id="new">+ Nouvelle tâche</button></div>
+  $("#main").innerHTML=`<div class="top"><h1 class="grow">Tâches</h1><span class="saved" id="saved"></span><button class="btn ghost" id="plages" title="Plages horaires des moments de la journée : rappel 10 min avant la fin">🕒 Horaires des moments</button><button class="btn" id="new">+ Nouvelle tâche</button></div>
   <div class="tools">
     <div class="chips">${[["jour","Chaque jour"],["semaine","Hebdo"],["mois","Mensuel"],["tout","Toutes"]].map(([k,l])=>`<button class="chip" data-freq="${k}" aria-pressed="${T.freq===k}">${l}</button>`).join("")}</div>
     <select id="fm"><option value="">Tous les moments</option>${MOMENTS.map(m=>`<option ${m===T.moment?"selected":""}>${m}</option>`).join("")}</select>
@@ -304,6 +304,15 @@ async function pTaches(){
   $("#tb").addEventListener("dragend",e=>{dragId=null;const tr=e.target.closest("tr[data-id]");if(tr)tr.draggable=false});
   // nouvelle tâche
   $("#new").onclick=()=>tacheDlg({freq:T.freq==="tout"?"jour":T.freq,moment:T.moment||"Ouverture",jour:"1"},async d=>{await call("tacheSave",d);toast("Tâche ajoutée");reload()});
+  // horaires des moments : sur le téléphone, les tâches sont rangées par moment avec ces plages ; rappel 10 min avant la fin aux employés en poste
+  $("#plages").onclick=async()=>{const r=await call("taches",{date:new Date().toISOString().slice(0,10)}),P=r.plages||{};
+    dialog(`<h3>🕒 Horaires des moments</h3><p class="muted small">Sur le téléphone, les tâches sont rangées par moment avec ces horaires. <b>10 min avant la fin</b> de chaque moment, les employés en poste à ce moment-là reçoivent un rappel s'il reste des tâches. Les tâches « Gérance » ne sont pas montrées sur le téléphone.</p>
+    <table class="t"><thead><tr><th>Moment</th><th>Début</th><th>Fin</th></tr></thead><tbody>${Object.keys(P).map(k=>`<tr data-m="${esc(k)}"><td>${esc(k)}</td><td><input class="pa" value="${esc(P[k][0])}" style="width:80px"></td><td><input class="pb" value="${esc(P[k][1])}" style="width:80px"></td></tr>`).join("")}</tbody></table>
+    <div class="acts"><button class="btn ghost" data-x>Annuler</button><button class="btn" data-ok>Enregistrer</button></div>`,(d,close)=>{
+      d.querySelector("[data-x]").onclick=close;
+      d.querySelector("[data-ok]").onclick=async()=>{const plages={};d.querySelectorAll("tr[data-m]").forEach(tr=>plages[tr.dataset.m]=[tr.querySelector(".pa").value.trim(),tr.querySelector(".pb").value.trim()]);
+        await act(()=>call("plagesSave",{plages}),"Horaires enregistrés");close()};
+    })};
   // suggestions
   $("#main").querySelectorAll("[data-sok]").forEach(b=>b.onclick=()=>{const x=sugg.find(y=>y.id===b.dataset.sok);
     tacheDlg({titre:x.titre,note:x.note,moment:x.moment||"Journée",freq:x.freq,jour:"1"},async d=>{await call("suggestionRepondre",{id:x.id,statut:"acceptee",tache:d});toast("Ajoutée à la liste");reload()},"Ajouter la suggestion")});
