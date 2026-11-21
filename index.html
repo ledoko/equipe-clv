@@ -173,6 +173,7 @@ h2{font-family:var(--display);font-weight:600;font-size:1.1rem;margin:0}
 .invday{display:flex;flex-direction:column;gap:8px;text-align:left;border:1.5px solid var(--line);font:inherit;color:inherit}
 .invday.cur{border-color:var(--lagoon)}
 .invf{border:1.5px solid var(--line);display:flex;flex-direction:column;gap:6px}.invf.cur{border-color:var(--lagoon)}
+.mcards{display:flex;flex-direction:column;gap:10px}.mcard{display:flex;flex-direction:column;gap:6px;text-align:left;border:1.5px solid var(--line);font:inherit;color:inherit;width:100%}.mcard.now{border-color:var(--lagoon)}.mcard.fini{opacity:.75}
 .mgrp{display:flex;align-items:center;gap:8px}.mgrp .hr{font-weight:500;color:var(--muted);font-size:.85em;text-transform:none;letter-spacing:0}.mgrp .cnt{font-size:.85em;color:var(--muted)}.mgrp .cnt.ok{color:var(--ok)}.mgrp.now{color:var(--lagoon)}
 .invweek{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:12px}.invj{display:flex;flex-direction:column;align-items:center;gap:1px;padding:6px 0;border:1.5px solid var(--line);border-radius:12px;background:var(--surface);color:inherit;font:inherit;font-size:.75rem}.invj b{font-size:1rem}.invj .dot{font-size:.7rem;color:var(--muted)}.invj.auj{border-color:var(--lagoon)}.invj.sel{background:var(--lagoon);border-color:var(--lagoon);color:#fff}.invj.sel .dot{color:#fff}
 .invday:disabled{opacity:.5}
@@ -233,7 +234,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-22a";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-22b";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -542,11 +543,12 @@ async function semaineTypeSheet(){
 
 // ---------- tâches ----------
 async function vTaches(){
-  const d=sub&&sub.date||today(), filtre=sub&&sub.filtre||"tout", cacher=!!(sub&&sub.cacher);
+  // filtre "" = les moments en cartes (avec %) ; un moment = ses tâches ; "tout" = toute la liste
+  const d=sub&&sub.date||today(), filtre=sub&&sub.filtre||"", cacher=!!(sub&&sub.cacher);
   const [r,sem]=await Promise.all([call("taches",{date:d}),call("tachesSemaine",{date:d}).catch(()=>null)]);
   const list=r.taches.filter(x=>!(vueEmp&&x.qui==="Gérance"));
   const moments=[...new Set(list.map(x=>x.moment))];
-  const vis=list.filter(x=>(filtre==="tout"||x.moment===filtre)&&!(cacher&&x.fait));
+  const vis=filtre===""?[]:list.filter(x=>(filtre==="tout"||x.moment===filtre)&&!(cacher&&x.fait));
   const n=list.length,f=list.filter(x=>x.fait).length;
   // rangées par moment de la journée, avec la plage horaire ; le moment en cours est mis en avant (aujourd'hui)
   const PL=r.plages||{},EMO={"Ouverture":"🌅","Matin":"☕","Pré-service":"🍽️","Journée":"☀️","Post-service":"🧽","Après-midi":"🕒","Nettoyage":"🧹","Fermeture":"🌙"};
@@ -569,21 +571,25 @@ async function vTaches(){
   <div class="nav"><button class="icon" id="dprev" aria-label="Jour précédent">‹</button><b class="cap">${d===today()?"Aujourd'hui · ":""}${jourCourt(d)} ${dt(d,{month:"short"})}</b><button class="icon" id="dnext" aria-label="Jour suivant" ${d>=today()?"disabled":""}>›</button></div>
   ${strip?`<div class="invweek">${strip}</div>`:""}
   <div class="card"><div class="sechead"><h2>${f} / ${n} faites</h2><label class="small muted row" style="gap:6px"><input type="checkbox" id="cacher" style="width:auto" ${cacher?"checked":""}> Cacher les faites</label></div><div class="prog"><i style="width:${n?f/n*100:0}%"></i></div></div>
-  <div class="chips"><button class="chip" data-f="tout" aria-pressed="${filtre==="tout"}">Tout</button>${moments.map(m=>`<button class="chip" data-f="${esc(m)}" aria-pressed="${filtre===m}">${esc(m)}</button>`).join("")}</div>
-  <div class="list" id="tl">${html||`<div class="empty">${cacher&&n?"Tout est fait 🎉":"Aucune tâche"}</div>`}</div>
+  ${filtre===""?`<div class="mcards">${moments.map(k=>{const c=parM[k||"Autres"]||[0,0],pc=c[0]?Math.round(c[1]*100/c[0]):0,ec=enCours(k);
+      return `<button class="card mcard ${ec?"now":""} ${pc>=100?"fini":""}" data-f="${esc(k)}" ${ec?'id="tnow"':""}><div class="row"><b class="grow">${EMO[k]||"•"} ${esc(k||"Autres")}</b><span class="pct ${pc>=100?"ok":""}">${pc} %</span></div>
+        <div class="prog"><i style="width:${pc}%"></i></div><div class="small muted">${PL[k]?`${PL[k][0].replace(":","h")} → ${PL[k][1].replace(":","h")} · `:""}${c[1]} / ${c[0]} faites${ec?" · <b style='color:var(--lagoon)'>en ce moment</b>":""}</div></button>`}).join("")||`<div class="empty">Aucune tâche</div>`}</div>
+      <button class="btn ghost full" data-f="tout" style="margin:10px 0">Voir toutes les tâches de la journée</button>`
+    :`<div class="row" style="margin:4px 0 8px"><button class="btn small ghost" data-f="">‹ Tous les moments</button></div>
+  <div class="list" id="tl">${html||`<div class="empty">${cacher&&n?"Tout est fait 🎉":"Aucune tâche"}</div>`}</div>`}
   ${d===today()?`<button class="btn ghost" id="compter" style="margin-bottom:8px">📋 Compter (sauces, mise en place)</button>`:""}
   <button class="btn ghost" id="sugg">💡 Suggérer une tâche</button>`;
   bindOut();
-  $("#sugg").onclick=()=>suggestionSheet(filtre!=="tout"?filtre:"");
+  $("#sugg").onclick=()=>suggestionSheet(filtre&&filtre!=="tout"?filtre:"");
   const cpt=$("#compter");if(cpt)cpt.onclick=()=>choixComptage();
   const setSub=o=>{sub=Object.assign({date:d,filtre,cacher},o);go("taches")};
   $("#dprev").onclick=()=>setSub({date:addDays(d,-1)});
   $("#app").querySelectorAll(".invweek [data-v]").forEach(b=>b.onclick=()=>setSub({date:b.dataset.v}));
-  const tn=$("#tnow");if(tn&&filtre==="tout"&&!(sub&&sub.noscroll))setTimeout(()=>tn.scrollIntoView({block:"start",behavior:"smooth"}),80);
+  const tn=$("#tnow");if(tn&&filtre===""&&d===today())setTimeout(()=>tn.scrollIntoView({block:"center",behavior:"smooth"}),80);
   $("#dnext").onclick=()=>{if(d<today())setSub({date:addDays(d,1)})};
   $("#cacher").onchange=e=>setSub({cacher:e.target.checked});
   $("#app").querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>setSub({filtre:b.dataset.f}));
-  $("#tl").addEventListener("click",async e=>{
+  if($("#tl"))$("#tl").addEventListener("click",async e=>{
     const rb=e.target.closest("[data-rec]");if(rb){e.stopPropagation();recetteSheet(list.find(y=>y.id===rb.dataset.rec));return}
     const b=e.target.closest("[data-t]");if(!b||b.disabled)return;
     const x=list.find(y=>y.id===b.dataset.t), fait=!x.fait;
