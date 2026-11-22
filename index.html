@@ -173,6 +173,7 @@ h2{font-family:var(--display);font-weight:600;font-size:1.1rem;margin:0}
 .invday{display:flex;flex-direction:column;gap:8px;text-align:left;border:1.5px solid var(--line);font:inherit;color:inherit}
 .invday.cur{border-color:var(--lagoon)}
 .invf{border:1.5px solid var(--line);display:flex;flex-direction:column;gap:6px}.invf.cur{border-color:var(--lagoon)}
+.step.pres button{width:auto;padding:0 10px;font-size:.9rem}.step.pres button[aria-pressed="true"]{background:var(--lagoon);color:#fff}
 .mcards{display:flex;flex-direction:column;gap:10px}.mcard{display:flex;flex-direction:column;gap:6px;text-align:left;border:1.5px solid var(--line);font:inherit;color:inherit;width:100%}.mcard.now{border-color:var(--lagoon)}.mcard.fini{opacity:.75}
 .mgrp{display:flex;align-items:center;gap:8px}.mgrp .hr{font-weight:500;color:var(--muted);font-size:.85em;text-transform:none;letter-spacing:0}.mgrp .cnt{font-size:.85em;color:var(--muted)}.mgrp .cnt.ok{color:var(--ok)}.mgrp.now{color:var(--lagoon)}
 .invweek{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:12px}.invj{display:flex;flex-direction:column;align-items:center;gap:1px;padding:6px 0;border:1.5px solid var(--line);border-radius:12px;background:var(--surface);color:inherit;font:inherit;font-size:.75rem}.invj b{font-size:1rem}.invj .dot{font-size:.7rem;color:var(--muted)}.invj.auj{border-color:var(--lagoon)}.invj.sel{background:var(--lagoon);border-color:var(--lagoon);color:#fff}.invj.sel .dot{color:#fff}
@@ -234,7 +235,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-22b";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-22c";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -686,9 +687,10 @@ function invListe(r,jour,fid){
   const secs=[...new Set(avec.map(cle))].sort((x,y)=>x.localeCompare(y,"fr")).map(k=>[k,avec.filter(a=>cle(a)===k)]);
   if(sans.length)secs.push(["Sans fournisseur",sans,true]);
   const row=a=>{const v=draft[a.id]==null?"":draft[a.id],n=nb(v),low=n!=null&&a.min!==""&&n<=+a.min,ok=deja[a.id]!=null;
-    const info=[grp==="fournisseur"?a.zone:tout?a.fournisseur:"",a.cartonnage?"📦 "+a.cartonnage:"",a.unite&&a.unite!==a.cartonnage?a.unite:"",a.cible!==""?"avoir "+a.cible:"",ok?`<b class="okc">✓ compté : ${deja[a.id]}</b>`:a.dernier?`dernier : ${a.dernier.texte||a.dernier.qte} le ${ddmm(a.dernier.date)}`:""].filter(Boolean);
+    const info=[grp==="fournisseur"?a.zone:tout?a.fournisseur:"",a.facon==="peser"?"⚖️ peser, en kg":a.facon==="estimer"?"≈ à estimer":a.facon==="presence"?"présent ou absent ?":a.unite&&!/^unit/i.test(a.unite)?a.unite:"",a.cible!==""?"avoir "+a.cible:"",ok?`<b class="okc">✓ compté : ${deja[a.id]}</b>`:a.dernier?`dernier : ${a.dernier.texte||a.dernier.qte} le ${ddmm(a.dernier.date)}`:""].filter(Boolean);
     return `<div class="inv ${low?"low":""} ${ok&&v===""?"vu":""}" data-a="${esc(a.id)}"><div class="t"><div class="a">${esc(a.nom)}</div><div class="b">${info.map(x=>x.startsWith("<b")?x:esc(x)).join(" · ")}</div><div class="b txt">${estTexte(v)?"✎ "+esc(v):""}</div></div>
-    ${peut?`<div class="step"><button data-d="-1" aria-label="Moins">−</button><input inputmode="${clavier}" enterkeyhint="next" maxlength="60" value="${esc(v)}" placeholder="${ok?esc(deja[a.id]):""}" aria-label="Quantité ${esc(a.nom)}"><button data-d="1" aria-label="Plus">+</button></div>`:""}</div>`};
+    ${peut&&a.facon==="presence"?`<div class="step pres"><button data-p="oui" aria-pressed="${v==="oui"}">✓ Là</button><button data-p="non" aria-pressed="${v==="non"}">✕ Manque</button></div>`
+     :peut?`<div class="step"><button data-d="-1" aria-label="Moins">−</button><input inputmode="${clavier}" enterkeyhint="next" maxlength="60" value="${esc(v)}" placeholder="${ok?esc(deja[a.id]):""}" aria-label="Quantité ${esc(a.nom)}"><button data-d="1" aria-label="Plus">+</button></div>`:""}</div>`};
   const p0=fait();
   $("#app").innerHTML=`${header(`<button class="icon" id="iback" aria-label="Retour" style="display:inline-grid;vertical-align:middle;margin-left:-8px">‹</button>${tout?"Tout l'inventaire":esc(nomF)+" · "+JLONG[wday(j)]+" "+ddmm(j)}`,peut?"Compte ce qu'il reste. Laisse vide ce que tu ne comptes pas.":j>t?"Ce jour n'est pas encore arrivé : la liste est là pour voir.":"Ce jour est passé : la liste est là pour voir.")}
   ${fait0?`<div class="card soft small">✓ ${fait0.rien?"Rien à commander, noté":"Inventaire validé"} par ${esc(fait0.par)} à ${fait0.le.slice(11,16)}. Tu peux recompter si besoin.</div>`:""}
@@ -710,7 +712,9 @@ function invListe(r,jour,fid){
   const upd=()=>{$("#ival").textContent=`Valider l'inventaire (${counted()})`;if(!tout&&base.length){const n=fait(),pc=Math.round(n*100/base.length);$("#ipn").textContent=n;$("#ipp").textContent=pc+" %";$("#ipb").style.width=pc+"%"}};
   const il=$("#il");
   entreeSuivante(il,".step input");
-  il.addEventListener("click",e=>{const b=e.target.closest("[data-d]");if(!b)return;const row=b.closest("[data-a]"),inp=row.querySelector("input");const cur=String(inp.value),n=nb(cur);
+  il.addEventListener("click",e=>{const p=e.target.closest("[data-p]");if(p){const row=p.closest("[data-a]"),v=draft[row.dataset.a]===p.dataset.p?"":p.dataset.p;draft[row.dataset.a]=v;save();upd();
+      row.querySelectorAll("[data-p]").forEach(x=>x.setAttribute("aria-pressed",String(x.dataset.p===v)));return}
+    const b=e.target.closest("[data-d]");if(!b)return;const row=b.closest("[data-a]"),inp=row.querySelector("input");const cur=String(inp.value),n=nb(cur);
     const v=n==null?String(Math.max(0,+b.dataset.d)):cur.replace(/\d+([.,]\d+)?/,String(Math.max(0,Math.round((n+(+b.dataset.d))*100)/100)));inp.value=v;draft[row.dataset.a]=v;save();upd();mark(row)});
   il.addEventListener("input",e=>{const row=e.target.closest("[data-a]");if(!row)return;draft[row.dataset.a]=e.target.value;save();upd();mark(row)});
   function mark(row){const a=r.articles.find(x=>x.id===row.dataset.a),v=draft[a.id],n=nb(v);row.classList.toggle("low",n!=null&&a.min!==""&&n<=+a.min);const t=row.querySelector(".txt");if(t)t.textContent=estTexte(v)?"✎ "+v:""}
@@ -720,7 +724,7 @@ function invListe(r,jour,fid){
     confirmSheet("Valider l'inventaire ?",plural(lignes.length,"article")+" compté"+(lignes.length>1?"s":"")+(tout?".":` chez ${nomF}`+(j===t?".":" pour "+JLONG[wday(j)]+" "+ddmm(j)+".")),"Valider",async()=>{
       const res=await act(()=>call("inventaireValider",Object.assign({lignes,debutMs:debutMs(),pour:j},tout?{}:{fournisseurId:fid})));
       draft={};try{localStorage.removeItem(K);localStorage.removeItem(K+"-debut")}catch(e){}
-      open(`<h3>Inventaire enregistré ✓</h3>${res.aCommander.length?`<p class="hint">À commander (David est prévenu) :</p>${res.aCommander.map(f=>`<div class="card"><b>${esc(f.fournisseur)}</b>${f.lignes.map(l=>`<div class="row small"><span class="grow">${esc(l.nom)}</span><span class="muted">reste ${l.stock}</span><b>+${l.qte}${l.unite==="g"?" g":""}</b></div>`).join("")}</div>`).join("")}`:`<p class="hint">Rien sous le minimum. Merci !</p>`}<button class="btn full" id="iok">OK</button>`,()=>{$("#iok").onclick=()=>{close();sub={vue:tout?t:j};go("inventaire")}});
+      open(`<h3>Inventaire enregistré ✓</h3>${res.aCommander.length?`<p class="hint">À commander (David est prévenu) :</p>${res.aCommander.map(f=>`<div class="card"><b>${esc(f.fournisseur)}</b>${f.lignes.map(l=>`<div class="row small"><span class="grow">${esc(l.nom)}</span><span class="muted">${l.stock==="absent"?"manque":"reste "+l.stock}</span><b>+${esc(l.texte||l.qte)}</b></div>`).join("")}</div>`).join("")}`:`<p class="hint">Rien sous le minimum. Merci !</p>`}<button class="btn full" id="iok">OK</button>`,()=>{$("#iok").onclick=()=>{close();sub={vue:tout?t:j};go("inventaire")}});
     });
   };
 }
@@ -806,15 +810,16 @@ function livraisonDefaut(f){const d=new Date(Date.now()+(f&&f.canal==="sms"&&new
   if(d.getDay()===0)d.setDate(d.getDate()+1);return new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)} // date locale (Nouméa), pas UTC
 function mailCommande(c,f,art,livr){
   const jj=String(livr||livraisonDefaut(f)).slice(8,10)+"/"+String(livr||livraisonDefaut(f)).slice(5,7);
-  // Mot de l'unité : celui de la ligne s'il est connu, sinon le cartonnage de l'article (« 3 Unités », « 2 Cartons », « 1,5 kg »)
+  // Unité de commande de la ligne, accordée (« 1 Carton », « 2 Cartons ») ; les mesures restent telles quelles (« 1,5 kg », « 2 x 1kg ») ; vide = juste le chiffre.
+  // Même règle que UniteCommande.texte (Logic.gs).
+  const accordMot=(q,u)=>{u=String(u||"").trim();const v=Number(String(q).replace(",","."));if(!u||/\d/.test(u)||/^(kg|g|l|cl|ml)$/i.test(u)||isNaN(v))return u;
+    if(v>1&&!/[sx]$/i.test(u))return u+"s";if(v<=1&&/[^s]s$/i.test(u)&&u.length>3)return u.slice(0,-1);return u};
   const UN={carton:"Carton",paquet:"Paquet",pack:"Pack",balle:"Balle",sac:"Sac",poche:"Poche",unite:"Unité",unit:"Unité",kg:"kg",sachet:"Sachet",boite:"Boîte",bouteille:"Bouteille",bidon:"Bidon",filet:"Filet",seau:"Seau",bloc:"Bloc"};
   const cle=u=>String(u||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().replace(/s$/,"");
-  const motU=(l,a)=>cle(l.unite)==="unite"||cle(l.unite)==="unit"?"":UN[cle(l.unite)]||""; // pas d'unité sur la ligne = rien (juste le chiffre)
   const n=q=>{const m=/\d+([.,]\d+)?/.exec(String(q));return m?+m[0].replace(",","."):0};
   const L=c.lignes.map(l=>{const a=(art&&art[l.articleId])||{},nom=a.ref||l.nom,q=String(l.qte).trim();
-    let qq=q;if(/^\d+([.,]\d+)?$/.test(q)){const lu=String(l.unite||"").trim(),u=motU(l,a);
-      if(lu&&!UN[cle(lu)]&&!/^unit/i.test(lu))qq=`${q} ${lu}`; // unité tapée sur la ligne (« x 1kg ») : reprise telle quelle
-      else if(u)qq=`${q} ${u}${u!=="kg"&&n(q)>1?"s":""}`}
+    let qq=q;if(/^\d+([.,]\d+)?$/.test(q)){const lu=String(l.unite||"").trim();
+      if(lu&&!/^unit/i.test(lu))qq=`${q} ${accordMot(q,UN[cle(lu)]&&!/\d/.test(lu)?UN[cle(lu)]:lu)}`}
     return {k:n(q),u:qq===q&&/^\d+([.,]\d+)?$/.test(q)?0:1,t:`${qq}    ${nom}`}}).sort((a,b)=>a.k-b.k||a.u-b.u||a.t.localeCompare(b.t,"fr"));
   const lignes=L.map(x=>x.t).join("\n");
   // SMS (ex. Tang Sneng Na / Nana) : sur le modèle des SMS de David
@@ -822,10 +827,10 @@ function mailCommande(c,f,art,livr){
   const L2=livr||livraisonDefaut(f),auj=new Date(),iso=x=>new Date(x.getTime()-x.getTimezoneOffset()*6e4).toISOString().slice(0,10),dem=new Date(auj.getTime()+864e5);
   const quand=L2===iso(auj)?`pour aujourd'hui ${jj}`:L2===iso(dem)?`pour demain le ${jj}`:`le ${jj}`;
   const uSms=(l,a)=>{const lu=String(l.unite||"").trim();if(lu&&!/^unit/i.test(lu))return lu.toLowerCase();
-    const k=cle(a.unite);if(k==="botte")return "botte";if(k==="main")return "main";return cle(a.cartonnage)==="kg"||/^poids/i.test(a.unite||"")?"kg":""};
+    const k=cle(a.unite);if(k==="botte")return "botte";if(k==="main")return "main";return a.facon==="peser"?"kg":""};
   const smsL=c.lignes.map(l=>{const a=(art&&art[l.articleId])||{},q=String(l.qte).trim(),nom=String(l.nom||a.nom||"").toLowerCase();
     if(!/^\d+([.,]\d+)?$/.test(q))return {k:n(q),t:`- ${q} ${nom}`};
-    let u=uSms(l,a);if(u==="botte"||u==="main")u=(n(q)>1?u+"s":u)+" de";
+    let u=uSms(l,a);const ku=cle(u);if(ku==="botte"||ku==="main")u=(n(q)>1?ku+"s":ku)+" de";else u=accordMot(q,u);
     return {k:n(q),t:`- ${q}${u?" "+u:""} ${nom}`}});
   const sms=`${auj.getHours()>=17?"Bonsoir":"Bonjour"}${f.contact?" "+f.contact:""},\nPour livraison ${quand}:\n\n${smsL.map(x=>x.t).join("\n")}\n\nEn te remerciant,\n\nDavid\nSunshine Coffee\nMirage Plaza, Baie des Citrons`;
   return {sms,lignes:L.map(x=>x.t.split("    ")[0]).join("\n"),sujet:`Sunshine Coffee - Commande pour livraison le ${jj}`,
@@ -871,13 +876,14 @@ async function gCommandes(){
     const lignes=c.lignes.map(l=>Object.assign({},l));
     const arts=r.articles.filter(a=>a.fournisseurId===c.fournisseurId);
     const draw=()=>open(`<h3>${esc(fo(c.fournisseurId).nom)}</h3>
-      <div>${lignes.map((l,i)=>`<div class="cl"><span class="grow">${esc(l.nom)}</span><input data-q="${i}" value="${esc(l.qte)}" maxlength="40" placeholder="ex. 2 cartons" style="max-width:130px"><button class="icon" data-rm="${i}" aria-label="Retirer">✕</button></div>`).join("")||`<p class="hint">Aucune ligne</p>`}</div>
+      <div>${lignes.map((l,i)=>`<div class="cl"><span class="grow">${esc(l.nom)}</span><input data-q="${i}" value="${esc(l.qte)}" maxlength="40" placeholder="qté" style="max-width:70px"><input data-u="${i}" value="${esc(l.unite||"")}" maxlength="30" placeholder="unité" style="max-width:90px" aria-label="Unité de commande"><button class="icon" data-rm="${i}" aria-label="Retirer">✕</button></div>`).join("")||`<p class="hint">Aucune ligne</p>`}</div>
       <div class="row"><select id="c-add" class="grow"><option value="">+ Ajouter un article…</option>${arts.map(a=>`<option value="${esc(a.id)}">${esc(a.nom)}</option>`).join("")}<option value="__libre">Autre (texte libre)…</option></select></div>
       <input id="c-libre" placeholder="Nom de l'article" hidden>
       <div class="actions"><button class="btn bad" id="c-del">Supprimer</button><button class="btn" id="c-ok">Enregistrer</button></div>`,()=>{
         $("#sheet").querySelectorAll("[data-q]").forEach(i=>i.oninput=()=>{lignes[+i.dataset.q].qte=i.value});
+        $("#sheet").querySelectorAll("[data-u]").forEach(i=>i.oninput=()=>{lignes[+i.dataset.u].unite=i.value});
         $("#sheet").querySelectorAll("[data-rm]").forEach(b=>b.onclick=()=>{lignes.splice(+b.dataset.rm,1);draw()});
-        $("#c-add").onchange=e=>{const v=e.target.value;if(v==="__libre"){$("#c-libre").hidden=false;$("#c-libre").focus();return}const a=arts.find(x=>x.id===v);if(a){lignes.push({articleId:a.id,nom:a.nom,unite:"",qte:a.cible||1});draw()}};
+        $("#c-add").onchange=e=>{const v=e.target.value;if(v==="__libre"){$("#c-libre").hidden=false;$("#c-libre").focus();return}const a=arts.find(x=>x.id===v);if(a){lignes.push({articleId:a.id,nom:a.nom,unite:a.uniteCmd||"",qte:a.cible||1});draw()}};
         $("#c-libre").onkeydown=e=>{if(e.key==="Enter"&&e.target.value.trim()){lignes.push({articleId:"",nom:e.target.value.trim(),qte:1});draw()}};
         $("#c-del").onclick=()=>confirmSheet("Supprimer cette commande ?","","Supprimer",async()=>{await act(()=>call("commandeSupprimer",{id:c.id}),"Supprimée");go("gerer",{page:"commandes"})});
         $("#c-ok").onclick=async()=>{const lib=$("#c-libre");if(lib&&!lib.hidden&&lib.value.trim())lignes.push({articleId:"",nom:lib.value.trim(),qte:1});await act(()=>call("commandeSave",{id:c.id,lignes}),"Enregistré");go("gerer",{page:"commandes"})};
@@ -954,15 +960,16 @@ async function gArticles(){
     open(`<h3>${a.id?"Modifier l'article":"Nouvel article"}</h3>
     <label class="f">Nom<input id="a-n" value="${esc(a.nom||"")}"></label>
     <label class="f">Fournisseur<select id="a-f"><option value="">—</option>${r.fournisseurs.filter(f=>f.type!=="frais").sort((x,y)=>x.nom<y.nom?-1:1).map(f=>`<option value="${esc(f.id)}" ${f.id===a.fournisseurId?"selected":""}>${esc(f.nom)}</option>`).join("")}</select></label>
-    <div class="grid2"><label class="f">Zone<input id="a-z" list="zl" value="${esc(a.zone||"")}"><datalist id="zl">${zones.map(z=>`<option value="${esc(z)}">`).join("")}</datalist></label><label class="f">Unité<input id="a-u" value="${esc(a.unite||"unité")}"></label></div>
-    <label class="f">Cartonnage<select id="a-k"><option value="">—</option>${["unité","kg","paquet","carton"].map(k=>`<option ${a.cartonnage===k?"selected":""}>${k}</option>`).join("")}</select></label>
+    <div class="grid2"><label class="f">Zone<input id="a-z" list="zl" value="${esc(a.zone||"")}"><datalist id="zl">${zones.map(z=>`<option value="${esc(z)}">`).join("")}</datalist></label><label class="f">Façon de compter<select id="a-fa">${[["compter","Compter"],["peser","Peser (kg)"],["estimer","Estimer"],["presence","Présent / absent"]].map(([k,l])=>`<option value="${k}" ${(a.facon||"compter")===k?"selected":""}>${l}</option>`).join("")}</select></label></div>
+    <label class="f">Unité de comptage<input id="a-u" value="${esc(a.unite||"")}" placeholder="boules, sachets… (kg si on pèse)"></label>
+    <div class="grid2"><label class="f">Unité de commande<input id="a-uc" value="${esc(a.uniteCmd||"")}" placeholder="vide = juste le chiffre"></label><label class="f">Contenance<input id="a-co" inputmode="decimal" value="${esc(a.contenance||"")}" placeholder="ex. 12 par carton"></label></div>
     <div class="grid2"><label class="f">Mini (commander si ≤)<input id="a-min" inputmode="decimal" value="${esc(a.min||"")}"></label><label class="f">Cible (remplir jusqu'à)<input id="a-c" inputmode="decimal" value="${esc(a.cible||"")}"></label></div>
     ${a.note?`<p class="hint">${esc(a.note)}</p>`:""}
     <label class="row small"><input type="checkbox" id="a-act" style="width:auto" ${a.actif==="non"?"":"checked"}> Dans l'inventaire</label>
     <p class="err" id="a-err" hidden></p>
     <div class="actions"><button class="btn ghost" id="a-x">Annuler</button><button class="btn" id="a-ok">Enregistrer</button></div>`,()=>{
       $("#a-x").onclick=close;
-      $("#a-ok").onclick=async()=>{try{await call("articleSave",{id:a.id,nom:$("#a-n").value.trim(),fournisseurId:$("#a-f").value,zone:$("#a-z").value.trim(),unite:$("#a-u").value.trim(),cartonnage:$("#a-k").value,min:$("#a-min").value.trim(),cible:$("#a-c").value.trim(),actif:$("#a-act").checked?"oui":"non",note:a.note&&/auto|calculés|remplir/.test(a.note)?"":a.note});toast("Enregistré");go("gerer",{page:"articles"})}catch(e){$("#a-err").hidden=false;$("#a-err").textContent=e.message}};
+      $("#a-ok").onclick=async()=>{try{await call("articleSave",{id:a.id,nom:$("#a-n").value.trim(),fournisseurId:$("#a-f").value,zone:$("#a-z").value.trim(),unite:$("#a-u").value.trim(),facon:$("#a-fa").value,uniteCmd:$("#a-uc").value.trim(),contenance:$("#a-co").value.trim(),min:$("#a-min").value.trim(),cible:$("#a-c").value.trim(),actif:$("#a-act").checked?"oui":"non",note:a.note&&/auto|calculés|remplir/.test(a.note)?"":a.note});toast("Enregistré");go("gerer",{page:"articles"})}catch(e){$("#a-err").hidden=false;$("#a-err").textContent=e.message}};
     });
   }
 }
