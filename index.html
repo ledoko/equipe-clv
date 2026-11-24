@@ -235,7 +235,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-24a";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-24b";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -804,46 +804,7 @@ async function vGerer(){
 function backHead(title,subtitle){return header(`<button class="icon" id="back" aria-label="Retour" style="display:inline-grid;vertical-align:middle;margin-left:-8px">‹</button>${title}`,subtitle)}
 function bindBack(){$("#back").onclick=()=>go("gerer",null);bindOut()}
 
-// ---------- email de commande, sur le modèle des emails envoyés par David
-// Objet « Sunshine Coffee - Commande pour livraison le JJ/MM », « Bonjour <contact>, », lignes « quantité    article » triées par quantité.
-function livraisonDefaut(f){const d=new Date(Date.now()+(f&&f.canal==="sms"&&new Date().getHours()<12?0:864e5)); // SMS envoyé le matin = livraison aujourd'hui
-  if(d.getDay()===0)d.setDate(d.getDate()+1);return new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)} // date locale (Nouméa), pas UTC
-function mailCommande(c,f,art,livr){
-  const jj=String(livr||livraisonDefaut(f)).slice(8,10)+"/"+String(livr||livraisonDefaut(f)).slice(5,7);
-  // Unité de commande de la ligne, accordée (« 1 Carton », « 2 Cartons ») ; les mesures restent telles quelles (« 1,5 kg », « 2 x 1kg ») ; vide = juste le chiffre.
-  // Même règle que UniteCommande.texte (Logic.gs).
-  const accordMot=(q,u)=>{u=String(u||"").trim();const v=Number(String(q).replace(",","."));if(!u||/\d/.test(u)||/^(kg|g|l|cl|ml)$/i.test(u)||isNaN(v))return u;
-    if(v>1&&!/[sx]$/i.test(u))return u+"s";if(v<=1&&/[^s]s$/i.test(u)&&u.length>3)return u.slice(0,-1);return u};
-  const UN={carton:"Carton",paquet:"Paquet",pack:"Pack",balle:"Balle",sac:"Sac",poche:"Poche",unite:"Unité",unit:"Unité",kg:"kg",sachet:"Sachet",boite:"Boîte",bouteille:"Bouteille",bidon:"Bidon",filet:"Filet",seau:"Seau",bloc:"Bloc"};
-  const cle=u=>String(u||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().replace(/s$/,"");
-  const n=q=>{const m=/\d+([.,]\d+)?/.exec(String(q));return m?+m[0].replace(",","."):0};
-  const L=c.lignes.map(l=>{const a=(art&&art[l.articleId])||{},nom=a.ref||l.nom,q=String(l.qte).trim();
-    let qq=q;if(/^\d+([.,]\d+)?$/.test(q)){const lu=String(l.unite||"").trim();
-      if(lu&&!/^unit/i.test(lu))qq=`${q} ${accordMot(q,UN[cle(lu)]&&!/\d/.test(lu)?UN[cle(lu)]:lu)}`}
-    return {k:n(q),u:qq===q&&/^\d+([.,]\d+)?$/.test(q)?0:1,t:`${qq}    ${nom}`}}).sort((a,b)=>a.k-b.k||a.u-b.u||a.t.localeCompare(b.t,"fr"));
-  const lignes=L.map(x=>x.t).join("\n");
-  // SMS (ex. Tang Sneng Na / Nana) : sur le modèle des SMS de David
-  //   « Bonsoir Nana,\nPour livraison pour demain le 13/11:\n\n- 2 kg pomme verte\n- 3 bottes de persil\n\nEn te remerciant,\n\nDavid\nSunshine Coffee\nMirage Plaza, Baie des Citrons »
-  const L2=livr||livraisonDefaut(f),auj=new Date(),iso=x=>new Date(x.getTime()-x.getTimezoneOffset()*6e4).toISOString().slice(0,10),dem=new Date(auj.getTime()+864e5);
-  const quand=L2===iso(auj)?`pour aujourd'hui ${jj}`:L2===iso(dem)?`pour demain le ${jj}`:`le ${jj}`;
-  const uSms=(l,a)=>{const lu=String(l.unite||"").trim();if(lu&&!/^unit/i.test(lu))return lu.toLowerCase();
-    const k=cle(a.unite);if(k==="botte")return "botte";if(k==="main")return "main";return a.facon==="peser"?"kg":""};
-  const smsL=c.lignes.map(l=>{const a=(art&&art[l.articleId])||{},q=String(l.qte).trim(),nom=String(l.nom||a.nom||"").toLowerCase();
-    if(!/^\d+([.,]\d+)?$/.test(q))return {k:n(q),t:`- ${q} ${nom}`};
-    let u=uSms(l,a);const ku=cle(u);if(ku==="botte"||ku==="main")u=(n(q)>1?ku+"s":ku)+" de";else u=accordMot(q,u);
-    return {k:n(q),t:`- ${q}${u?" "+u:""} ${nom}`}});
-  const sms=`${auj.getHours()>=17?"Bonsoir":"Bonjour"}${f.contact?" "+f.contact:""},\nPour livraison ${quand}:\n\n${smsL.map(x=>x.t).join("\n")}\n\nEn te remerciant,\n\nDavid\nSunshine Coffee\nMirage Plaza, Baie des Citrons`;
-  // WhatsApp (ex. Zayn) : sur le modèle des messages de David
-  //   « Bonsoir Jean-Pierre,\n\nPourrais-tu nous livrer 6kg de tofu pour demain le 20/11 ?\n\nEn te remerciant,\nDavid de Sunshine Coffee »
-  const waL=c.lignes.map(l=>{const a=(art&&art[l.articleId])||{},q=String(l.qte).trim(),nom=String(l.nom||a.nom||"").toLowerCase();
-    if(!/^\d+([.,]\d+)?$/.test(q))return `${q} ${nom}`;
-    let u=uSms(l,a);if(!u)return `${q} ${nom}`;u=accordMot(q,u);
-    return `${q}${/^(kg|g|l|cl|ml)$/i.test(u)?"":" "}${u}${/^[aeiouyhéèêàâîôû]/i.test(nom)?" d'":" de "}${nom}`});
-  const wa=`${auj.getHours()>=17?"Bonsoir":"Bonjour"}${f.contact?" "+f.contact:""},\n\nPourrais-tu nous livrer ${waL.length===1?`${waL[0]} ${quand} ?`:`${quand} :\n${waL.map(x=>"- "+x).join("\n")}`}\n\nEn te remerciant,\nDavid de Sunshine Coffee`;
-  return {sms,wa,lignes:L.map(x=>x.t.split("    ")[0]).join("\n"),sujet:`Sunshine Coffee - Commande pour livraison le ${jj}`,
-    corps:`Bonjour${f.contact?" "+f.contact:""},\n\nUne commande pour livraison le ${jj}:\n\n${lignes}\n\nEn te remerciant,\n\nCordialement,\n`,
-    court:`Bonjour${f.contact?" "+f.contact:""}, c'est David du Café La Victoria. Une commande pour livraison le ${jj} :\n${lignes}\nMerci !`};
-}
+// Le message au fournisseur (email, SMS, WhatsApp) est fabriqué par le serveur : action commandeMessage (Logic.gs, MessageCommande).
 async function gCommandes(){
   const r=await call("commandes");
   const fo=id=>r.fournisseurs.find(f=>f.id===id)||{nom:"Sans fournisseur",email:""};
@@ -860,14 +821,20 @@ async function gCommandes(){
   <section class="sec"><h2>Rythme des fournisseurs</h2><p class="hint">D'après les factures du dossier CLV - FACTURES et les commandes envoyées.</p>
   <div class="card scrollx"><table class="rep"><thead><tr><th>Fournisseur</th><th>Cdes</th><th>Tous les</th><th>Dernière</th></tr></thead><tbody>${r.frequences.filter(f=>f.nb).map(f=>`<tr><td>${esc(f.nom)}${f.retard?" ⚠️":""}${f.inactif?' <span class="pill off">inactif</span>':""}</td><td>${f.nb}</td><td>${f.intervalle!=null?Math.round(f.intervalle)+" j":"—"}</td><td>${f.depuis!=null?"il y a "+f.depuis+" j":"—"}</td></tr>`).join("")}</tbody></table></div></section>`;
   bindBack();
-  const app=$("#app"), txt=c=>c.lignes.map(l=>`- ${l.nom} : ${l.qte}`).join("\n");
+  const app=$("#app");
+  // message au fournisseur, fabriqué par le serveur ; « Copier » copie le même texte que celui qui part
+  const canalDe=f=>f.canal||(f.email?"email":f.telephone?"telephone":"email");
+  const texteDe=(m,canal)=>canal==="email"?m.corps:canal==="sms"?m.sms:canal==="whatsapp"?m.wa:m.court;
+  const message=c=>call("commandeMessage",{id:c.id}).then(m=>texteDe(m,canalDe(fo(c.fournisseurId))));
   app.querySelectorAll("[data-st]").forEach(b=>b.onclick=async()=>{const[id,st]=b.dataset.st.split(":");await act(()=>call("commandeSave",{id,statut:st}),st==="envoyee"?"Commande marquée envoyée":"Commande reçue");go("gerer",{page:"commandes"})});
-  app.querySelectorAll("[data-copy]").forEach(b=>b.onclick=async()=>{const c=r.commandes.find(x=>x.id===b.dataset.copy);try{await navigator.clipboard.writeText(txt(c));toast("Copié")}catch(e){toast("Copie impossible ici",true)}});
-  app.querySelectorAll("[data-mail]").forEach(b=>b.onclick=()=>{const c=r.commandes.find(x=>x.id===b.dataset.mail),f=fo(c.fournisseurId);
-    const canal=f.canal||(f.email?"email":f.telephone?"telephone":"email");
+  app.querySelectorAll("[data-copy]").forEach(b=>b.onclick=async()=>{const c=r.commandes.find(x=>x.id===b.dataset.copy);const p=message(c); // iPhone : la copie doit partir pendant le toucher, le texte arrive ensuite
+    try{if(window.ClipboardItem&&navigator.clipboard.write)await navigator.clipboard.write([new ClipboardItem({"text/plain":p.then(t=>new Blob([t],{type:"text/plain"}))})]);else await navigator.clipboard.writeText(await p);toast("Copié")}
+    catch(e){try{await navigator.clipboard.writeText(await p);toast("Copié")}catch(e2){toast("Copie impossible ici",true)}}});
+  app.querySelectorAll("[data-mail]").forEach(b=>b.onclick=async()=>{const c=r.commandes.find(x=>x.id===b.dataset.mail),f=fo(c.fournisseurId);
+    const canal=canalDe(f);
     const tel=String(f.telephone||"").replace(/[^\d+]/g,""), intl=tel.startsWith("+")?tel.slice(1):(tel.length===6?"687"+tel:tel);
-    const art={};r.articles.forEach(a=>art[a.id]=a);
-    const m=mailCommande(c,f,art), court=canal==="sms"?m.sms:canal==="whatsapp"?m.wa:m.court, body=canal==="email"?m.corps:court;
+    let m;try{m=await call("commandeMessage",{id:c.id})}catch(e){toast(e.message,true);return}
+    const body=texteDe(m,canal);
     let href="",bouton="",info="";
     if(canal==="sms"&&tel){href=`sms:+${intl}${IOS?"&":"?"}body=${encodeURIComponent(body)}`;bouton="Ouvrir le SMS";info="Le message s'ouvre dans tes SMS, prêt à envoyer : rien ne part tant que tu n'appuies pas sur Envoyer."}
     else if(canal==="whatsapp"&&tel){href=`https://wa.me/${intl}?text=${encodeURIComponent(body)}`;bouton="Ouvrir WhatsApp";info="Le message s'ouvre dans WhatsApp, prêt à envoyer : rien ne part tant que tu n'appuies pas sur Envoyer."}
