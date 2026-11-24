@@ -669,7 +669,14 @@ function mailCommande(c,f,art,livr){
     let u=uSms(l,a);const ku=cle(u);if(ku==="botte"||ku==="main")u=(n(q)>1?ku+"s":ku)+" de";else u=accordMot(q,u);
     return {k:n(q),t:`- ${q}${u?" "+u:""} ${nom}`}});
   const sms=`${auj.getHours()>=17?"Bonsoir":"Bonjour"}${f.contact?" "+f.contact:""},\nPour livraison ${quand}:\n\n${smsL.map(x=>x.t).join("\n")}\n\nEn te remerciant,\n\nDavid\nSunshine Coffee\nMirage Plaza, Baie des Citrons`;
-  return {sms,lignes:L.map(x=>x.t.split("    ")[0]).join("\n"),sujet:`Sunshine Coffee - Commande pour livraison le ${jj}`,
+  // WhatsApp (ex. Zayn) : sur le modèle des messages de David
+  //   « Bonsoir Jean-Pierre,\n\nPourrais-tu nous livrer 6kg de tofu pour demain le 20/11 ?\n\nEn te remerciant,\nDavid de Sunshine Coffee »
+  const waL=c.lignes.map(l=>{const a=(art&&art[l.articleId])||{},q=String(l.qte).trim(),nom=String(l.nom||a.nom||"").toLowerCase();
+    if(!/^\d+([.,]\d+)?$/.test(q))return `${q} ${nom}`;
+    let u=uSms(l,a);if(!u)return `${q} ${nom}`;u=accordMot(q,u);
+    return `${q}${/^(kg|g|l|cl|ml)$/i.test(u)?"":" "}${u}${/^[aeiouyhéèêàâîôû]/i.test(nom)?" d'":" de "}${nom}`});
+  const wa=`${auj.getHours()>=17?"Bonsoir":"Bonjour"}${f.contact?" "+f.contact:""},\n\nPourrais-tu nous livrer ${waL.length===1?`${waL[0]} ${quand} ?`:`${quand} :\n${waL.map(x=>"- "+x).join("\n")}`}\n\nEn te remerciant,\nDavid de Sunshine Coffee`;
+  return {sms,wa,lignes:L.map(x=>x.t.split("    ")[0]).join("\n"),sujet:`Sunshine Coffee - Commande pour livraison le ${jj}`,
     corps:`Bonjour${f.contact?" "+f.contact:""},\n\nUne commande pour livraison le ${jj}:\n\n${lignes}\n\nEn te remerciant,\n\nCordialement,\n`,
     court:`Bonjour${f.contact?" "+f.contact:""}, c'est David du Café La Victoria. Une commande pour livraison le ${jj} :\n${lignes}\nMerci !`};
 }
@@ -780,8 +787,8 @@ async function pCommandes(garder){
     const tel=String(f.telephone||"").replace(/[^\d+]/g,""),intl=tel.startsWith("+")?tel.slice(1):(tel.length===6?"687"+tel:tel);
     const wa=f.canal==="whatsapp"&&tel;
     const sms=f.canal==="sms";
-    const lien=(livr,body)=>{const m=mailCommande(c,f,art,livr);body=body||(wa?m.court:m.corps);if(sms)return "";return wa?`https://wa.me/${intl}?text=${encodeURIComponent(body)}`:f.email?`mailto:${encodeURIComponent(f.email)}?subject=${encodeURIComponent(m.sujet)}&body=${encodeURIComponent(body)}`:""};
-    const l0=livraisonDefaut(f), body=sms?mailCommande(c,f,art,l0).sms:wa?mailCommande(c,f,art,l0).court:corps(l0), href=lien(l0,body);
+    const lien=(livr,body)=>{const m=mailCommande(c,f,art,livr);body=body||(wa?m.wa:m.corps);if(sms)return "";return wa?`https://wa.me/${intl}?text=${encodeURIComponent(body)}`:f.email?`mailto:${encodeURIComponent(f.email)}?subject=${encodeURIComponent(m.sujet)}&body=${encodeURIComponent(body)}`:""};
+    const l0=livraisonDefaut(f), body=sms?mailCommande(c,f,art,l0).sms:wa?mailCommande(c,f,art,l0).wa:corps(l0), href=lien(l0,body);
     dialog(`<h3>${esc(f.nom)}</h3>${f.jourCommande?`<p class="muted small">⏰ Commander ${esc(f.jourCommande)}</p>`:""}
     <p class="muted small">${sms?"Commande par SMS : copie le texte et colle-le dans tes SMS (ou ouvre la commande sur le téléphone, le bouton ouvre le SMS prêt à envoyer).":href?(wa?"Le bouton ouvre WhatsApp avec le message prêt : rien ne part tant que tu ne cliques pas sur Envoyer.":"Le bouton ouvre un brouillon dans ta messagerie : rien n'est envoyé tant que tu ne cliques pas sur Envoyer."):"Pas d'email pour ce fournisseur (page Fournisseurs) : copie le texte."}</p>
     <div class="row" style="gap:8px;align-items:center"><label class="small">Livraison le <input id="m-l" type="date" value="${l0}" style="width:auto"></label>${f.email&&!wa?`<span class="muted small">À : ${esc(f.email)} · Objet : <span id="m-s">${esc(mailCommande(c,f,art,l0).sujet)}</span></span>`:""}</div>
@@ -789,7 +796,7 @@ async function pCommandes(garder){
     <div class="acts"><button class="btn ghost" data-x>Fermer</button><button class="btn ghost" id="m-c">Copier</button>${href?`<a class="btn" id="m-o" href="${esc(href)}" target="_blank" rel="noopener">${wa?"Ouvrir WhatsApp":"Ouvrir le brouillon"}</a>`:""}</div>`,(d,close)=>{
       d.querySelector("[data-x]").onclick=close;d.querySelector("#m-c").onclick=()=>copier(d.querySelector("#m-t").value);
       const ta=d.querySelector("#m-t"),ml=d.querySelector("#m-l"),majLien=()=>{const o=d.querySelector("#m-o");if(o)o.href=lien(ml.value,ta.value);const s=d.querySelector("#m-s");if(s)s.textContent=mailCommande(c,f,art,ml.value).sujet};
-      ml.onchange=()=>{const m=mailCommande(c,f,art,ml.value);ta.value=sms?m.sms:wa?m.court:m.corps;majLien()};ta.oninput=majLien;
+      ml.onchange=()=>{const m=mailCommande(c,f,art,ml.value);ta.value=sms?m.sms:wa?m.wa:m.corps;majLien()};ta.oninput=majLien;
       const o=d.querySelector("#m-o");if(o)o.onclick=()=>setTimeout(()=>{close();confirmer("Message envoyé ?",`Si tu as envoyé la commande à ${f.nom}, marque-la envoyée.`,"Marquer envoyée",async()=>{await act(()=>call("commandeSave",{id:c.id,statut:"envoyee"}),"Commande marquée envoyée");pCommandes()})},400);
     });
   };

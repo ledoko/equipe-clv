@@ -235,7 +235,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-22c";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-24a";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -833,7 +833,14 @@ function mailCommande(c,f,art,livr){
     let u=uSms(l,a);const ku=cle(u);if(ku==="botte"||ku==="main")u=(n(q)>1?ku+"s":ku)+" de";else u=accordMot(q,u);
     return {k:n(q),t:`- ${q}${u?" "+u:""} ${nom}`}});
   const sms=`${auj.getHours()>=17?"Bonsoir":"Bonjour"}${f.contact?" "+f.contact:""},\nPour livraison ${quand}:\n\n${smsL.map(x=>x.t).join("\n")}\n\nEn te remerciant,\n\nDavid\nSunshine Coffee\nMirage Plaza, Baie des Citrons`;
-  return {sms,lignes:L.map(x=>x.t.split("    ")[0]).join("\n"),sujet:`Sunshine Coffee - Commande pour livraison le ${jj}`,
+  // WhatsApp (ex. Zayn) : sur le modèle des messages de David
+  //   « Bonsoir Jean-Pierre,\n\nPourrais-tu nous livrer 6kg de tofu pour demain le 20/11 ?\n\nEn te remerciant,\nDavid de Sunshine Coffee »
+  const waL=c.lignes.map(l=>{const a=(art&&art[l.articleId])||{},q=String(l.qte).trim(),nom=String(l.nom||a.nom||"").toLowerCase();
+    if(!/^\d+([.,]\d+)?$/.test(q))return `${q} ${nom}`;
+    let u=uSms(l,a);if(!u)return `${q} ${nom}`;u=accordMot(q,u);
+    return `${q}${/^(kg|g|l|cl|ml)$/i.test(u)?"":" "}${u}${/^[aeiouyhéèêàâîôû]/i.test(nom)?" d'":" de "}${nom}`});
+  const wa=`${auj.getHours()>=17?"Bonsoir":"Bonjour"}${f.contact?" "+f.contact:""},\n\nPourrais-tu nous livrer ${waL.length===1?`${waL[0]} ${quand} ?`:`${quand} :\n${waL.map(x=>"- "+x).join("\n")}`}\n\nEn te remerciant,\nDavid de Sunshine Coffee`;
+  return {sms,wa,lignes:L.map(x=>x.t.split("    ")[0]).join("\n"),sujet:`Sunshine Coffee - Commande pour livraison le ${jj}`,
     corps:`Bonjour${f.contact?" "+f.contact:""},\n\nUne commande pour livraison le ${jj}:\n\n${lignes}\n\nEn te remerciant,\n\nCordialement,\n`,
     court:`Bonjour${f.contact?" "+f.contact:""}, c'est David du Café La Victoria. Une commande pour livraison le ${jj} :\n${lignes}\nMerci !`};
 }
@@ -860,7 +867,7 @@ async function gCommandes(){
     const canal=f.canal||(f.email?"email":f.telephone?"telephone":"email");
     const tel=String(f.telephone||"").replace(/[^\d+]/g,""), intl=tel.startsWith("+")?tel.slice(1):(tel.length===6?"687"+tel:tel);
     const art={};r.articles.forEach(a=>art[a.id]=a);
-    const m=mailCommande(c,f,art), court=canal==="sms"?m.sms:m.court, body=canal==="email"?m.corps:court;
+    const m=mailCommande(c,f,art), court=canal==="sms"?m.sms:canal==="whatsapp"?m.wa:m.court, body=canal==="email"?m.corps:court;
     let href="",bouton="",info="";
     if(canal==="sms"&&tel){href=`sms:+${intl}${IOS?"&":"?"}body=${encodeURIComponent(body)}`;bouton="Ouvrir le SMS";info="Le message s'ouvre dans tes SMS, prêt à envoyer : rien ne part tant que tu n'appuies pas sur Envoyer."}
     else if(canal==="whatsapp"&&tel){href=`https://wa.me/${intl}?text=${encodeURIComponent(body)}`;bouton="Ouvrir WhatsApp";info="Le message s'ouvre dans WhatsApp, prêt à envoyer : rien ne part tant que tu n'appuies pas sur Envoyer."}
