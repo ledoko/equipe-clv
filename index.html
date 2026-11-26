@@ -235,7 +235,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-26a";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-27a";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -381,9 +381,10 @@ async function start(){
 function tabs(){
   const t=[["accueil","🏠","Accueil"],["planning","📅","Planning"],["taches","✅","Tâches"]];
   if(S.reglages.inventaire)t.push(["inventaire","📦","Inventaire"]);
-  t.push(["repos","🌴","Repos"]);
+  t.push(["mep","🔪","Mise en place"]);
   if(isAdmin())t.push(["gerer","⚙️","Gérer"]);
-  $("#tabsIn").innerHTML=t.map(([k,i,l])=>`<button class="tab" data-v="${k}" ${view===k?'aria-current="page"':""}><i>${i}</i>${l}${k==="repos"&&S.attente?`<span class="dot">${S.attente}</span>`:""}</button>`).join("");
+  const actif=k=>view===k||(view==="repos"&&k==="planning");
+  $("#tabsIn").innerHTML=t.map(([k,i,l])=>`<button class="tab" data-v="${k}" ${actif(k)?'aria-current="page"':""}><i>${i}</i>${l}${k==="planning"&&S.attente?`<span class="dot">${S.attente}</span>`:""}</button>`).join("");
   $("#tabs").hidden=false;
 }
 $("#tabsIn").addEventListener("click",e=>{const b=e.target.closest("[data-v]");if(b){sub=null;go(b.dataset.v)}});
@@ -394,7 +395,7 @@ function go(v,s){
   const r=$("#root"), cle=v+"|"+(sub?JSON.stringify(sub):"")+"|"+S.me.id+(vueEmp?"|emp":""), vues=mem.vues||(mem.vues={}), vu=vues[cle];
   r.innerHTML=vu?`<div class="app stale" id="app">${vu}</div>`:`<div class="app" id="app"><div class="spin"></div></div>`;
   const tour=go.tour=(go.tour||0)+1;
-  const fn={accueil:vAccueil,planning:vPlanning,taches:vTaches,inventaire:vInventaire,repos:vRepos,gerer:vGerer}[v]||vAccueil;
+  const fn={accueil:vAccueil,planning:vPlanning,taches:vTaches,inventaire:vInventaire,repos:vRepos,mep:vMep,gerer:vGerer}[v]||vAccueil;
   fn().then(()=>{
     if(go.tour!==tour||view!==v)return;
     const app=$("#app");if(!app)return;
@@ -476,10 +477,11 @@ async function vPlanning(){
   $("#app").innerHTML=`${header("Planning")}
   <div class="nav noprint"><button class="icon" id="wprev" aria-label="Semaine précédente">‹</button><b>${titre}</b><button class="icon" id="wnext" aria-label="Semaine suivante">›</button></div>
   <div class="row wrap noprint"><div class="chips grow">${admin?`<button class="chip" data-m="equipe" aria-pressed="${mode==="equipe"}">Toute l'équipe</button><button class="chip" data-m="moi" aria-pressed="${mode==="moi"}">Mon planning</button>`:""}${l!==lundiDe(t)?`<button class="chip" id="wtoday">Cette semaine</button>`:""}</div>
-  ${admin?`<button class="btn small ghost" id="stype">Semaine type</button>`:""}</div>
+  ${admin?`<button class="btn small ghost" id="stype">Semaine type</button>`:""}<button class="btn small ghost" id="vrepos">🌴 ${admin?"Demandes de repos":"Mes repos"}${S.attente?` <span class="pill wait">${S.attente}</span>`:""}</button></div>
   <div class="days">${days}</div>
   ${admin?`<p class="hint">Les semaines se remplissent toutes seules à partir de la semaine type. Les repos acceptés retirent les postes de la personne. <button class="btn small ghost" id="reapp">Refaire cette semaine depuis la semaine type</button></p>`:""}`;
   bindOut();
+  $("#vrepos").onclick=()=>{sub=null;go("repos")};
   const setSub=o=>{sub=Object.assign({lundi:l,mode},o);go("planning")};
   $("#wprev").onclick=()=>setSub({lundi:addDays(l,-7)});
   $("#wnext").onclick=()=>setSub({lundi:addDays(l,7)});
@@ -601,6 +603,46 @@ async function vTaches(){
     b.classList.toggle("done",fait);b.querySelector(".box").textContent=fait?"✓":"";
     if(w)w.textContent=fait?`✓ Fait par ${S.me.prenom} à ${heureLocale()}`:"";
     try{const r=await call("tacheCocher",{tacheId:x.id,date:d,fait});if(fait&&r&&r.le&&w){x.fait=r;w.textContent=`✓ Fait par ${r.par} à ${r.le.slice(11,16)}`}}catch(err){toast(err.message,true);go("taches")}
+  });
+}
+
+// ---------- mise en place ----------
+// Les comptages par zone (sauces, barista, cuisine, desserts) et ce qu'il reste à préparer aujourd'hui (tâches « Remplir », « Préparer », « Refaire »).
+const ZONES_MEP=[["sauces","🧴","Sauces & condiments"],["barista","☕","Barista"],["cuisine","🥗","Cuisine"],["dessert","🍰","Desserts"]];
+async function vMep(){
+  const d=today(), cacher=!!(sub&&sub.cacher);
+  const r=await call("taches",{date:d}), list=r.taches;
+  const liste=x=>String(x.type).split(":")[1]||"sauces";
+  const zones=ZONES_MEP.map(([k,i,l])=>{const c=list.find(x=>String(x.type).startsWith("comptage")&&liste(x)===k);
+    return `<button class="card mcard" data-z="${k}"><div class="row"><b class="grow">${i} ${esc(l)}</b><span class="pill ${c&&c.fait?"ok":"info"}">${c&&c.fait?"✓ Compté":"Compter"}</span></div>
+      <div class="small muted">${c&&c.fait?`par ${esc(c.fait.par)} à ${c.fait.le.slice(11,16)}`:c?`À compter (${esc(c.moment)})`:"Pas de comptage prévu aujourd'hui"}</div></button>`}).join("");
+  const af=list.filter(x=>(x.type==="remplir"||x.type==="refaire")&&!(cacher&&x.fait));
+  const n=list.filter(x=>x.type==="remplir"||x.type==="refaire"),f=n.filter(x=>x.fait).length;
+  const EMO={"Ouverture":"🌅","Matin":"☕","Pré-service":"🍽️","Journée":"☀️","Post-service":"🧽","Après-midi":"🕒","Nettoyage":"🧹","Fermeture":"🌙"};
+  let html="",curM=null,curS=null;
+  af.forEach(x=>{
+    if(x.moment!==curM){curM=x.moment;curS=null;html+=`<div class="grp mgrp"><span class="grow">${EMO[x.moment]||"•"} ${esc(x.moment||"Autres")}</span></div>`}
+    const s=String(x.section||"").replace(/^Mise en place · /,"");if(s!==curS){curS=s;html+=`<div class="sgrp">${esc(s)}</div>`}
+    const late=x.retard&&!x.fait?`<span class="pill no">Prévu ${jourCourt(x.echeance)}</span>`:"";
+    const meta=[late,x.type==="refaire"?`<span class="pill wait">🔁 À refaire</span>`:"",x.recette?`<span class="pill info recbtn" data-rec="${esc(x.id)}" role="button">📖 Recette</span>`:"",`<span class="who2">${x.fait?`✓ Fait par ${esc(x.fait.par)} à ${x.fait.le.slice(11,16)}`:""}</span>`].join("");
+    html+=`<button class="task ${x.fait?"done":""}" data-t="${esc(x.id)}"><span class="box">${x.fait?"✓":""}</span><span class="grow"><div class="tt">${esc(x.titre)}</div>${x.note?`<div class="nn">${esc(x.note)}</div>`:""}<div class="meta">${meta}</div></span></button>`;
+  });
+  $("#app").innerHTML=`${header("Mise en place")}
+  <p class="hint">Après le service, compte chaque zone : ce qui manque devient une tâche ci-dessous.</p>
+  <div class="mcards">${zones}</div>
+  <section class="sec"><div class="sechead"><h2>À préparer aujourd'hui · ${f} / ${n.length}</h2><label class="small muted row" style="gap:6px"><input type="checkbox" id="cacher" style="width:auto" ${cacher?"checked":""}> Cacher les faites</label></div>
+  <div class="list" id="tl">${html||`<div class="empty">${cacher&&n.length?"Tout est fait 🎉":"Rien à préparer pour l'instant."}</div>`}</div></section>`;
+  bindOut();
+  $("#cacher").onchange=e=>{sub={cacher:e.target.checked};go("mep")};
+  $("#app").querySelectorAll("[data-z]").forEach(b=>b.onclick=()=>{const k=b.dataset.z,c=list.find(x=>String(x.type).startsWith("comptage")&&liste(x)===k&&!x.fait);comptageSheet(c||null,k)});
+  $("#tl").addEventListener("click",async e=>{
+    const rb=e.target.closest("[data-rec]");if(rb){e.stopPropagation();recetteSheet(list.find(y=>y.id===rb.dataset.rec));return}
+    const b=e.target.closest("[data-t]");if(!b)return;
+    const x=list.find(y=>y.id===b.dataset.t), fait=!x.fait, w=b.querySelector(".who2");
+    x.fait=fait?{par:S.me.prenom,le:"0000-00-00 "+heureLocale()}:null;
+    b.classList.toggle("done",fait);b.querySelector(".box").textContent=fait?"✓":"";
+    if(w)w.textContent=fait?`✓ Fait par ${S.me.prenom} à ${heureLocale()}`:"";
+    try{const r=await call("tacheCocher",{tacheId:x.id,date:d,fait});if(fait&&r&&r.le&&w){x.fait=r;w.textContent=`✓ Fait par ${r.par} à ${r.le.slice(11,16)}`}}catch(err){toast(err.message,true);go("mep")}
   });
 }
 
@@ -742,11 +784,13 @@ async function vRepos(){
     ${admin&&d.statut==="acceptee"?`<div class="row" style="gap:8px"><button class="btn small ghost" data-modif="${esc(d.id)}">Modifier</button><button class="btn small ghost" data-cancel="${esc(d.id)}">Annuler ce repos</button></div>`:""}</div>`};
   const att=list.filter(d=>d.statut==="attente"), rest=list.filter(d=>d.statut!=="attente").slice(0,30);
   $("#app").innerHTML=`${header(admin?"Demandes de repos":"Mes repos")}
+  <div class="row" style="margin:0 0 8px"><button class="btn small ghost" id="vplan">‹ Planning</button></div>
   <button class="btn sun" id="newd">+ ${admin?"Ajouter un repos":"Demander un repos"}</button>
   ${att.length?`<section class="sec"><h2>En attente</h2>${att.map(card).join("")}</section>`:""}
   <section class="sec"><h2>${att.length?"Déjà traitées":admin?"Demandes":"Mes demandes"}</h2>${rest.map(card).join("")||`<div class="empty">${att.length?"Aucune autre demande.":"Aucune demande pour l'instant."}</div>`}</section>`;
   bindOut();
   $("#newd").onclick=demandeSheet;
+  $("#vplan").onclick=()=>{sub=null;go("planning")};
   const app=$("#app");
   app.querySelectorAll("[data-yes]").forEach(b=>b.onclick=()=>repondre(b.dataset.yes,"acceptee"));
   app.querySelectorAll("[data-no]").forEach(b=>b.onclick=()=>repondre(b.dataset.no,"refusee"));
@@ -1206,7 +1250,7 @@ async function comptageSheet(tache,liste){
       if(!lignes.length){toast(mep?"Compte au moins un produit":"Compte au moins une sauce ou un condiment",true);return}
       const manquants=r.items.filter(i=>vals[i.id]==null||vals[i.id]==="").length;
       const valider=async()=>{$("#c-ok").disabled=true;try{const res=await call("comptageValider",{lignes,tacheId:tache?tache.id:""});
-        open(`<h3>Comptage enregistré ✓</h3>${res.aRemplir.length?`<p class="hint">Ajouté aux tâches (${mep?"mise en place, dès cet après-midi":"post-service"}) :</p>${res.aRemplir.map(t=>`<div class="item"><span>${mep?"🔪":"🧴"}</span><div class="t"><div class="a">${esc(t)}</div></div></div>`).join("")}`:`<p class="hint">Tout est au complet. Merci !</p>`}<button class="btn full" id="c-fin">OK</button>`,()=>{$("#c-fin").onclick=()=>{close();go("taches")}});
+        open(`<h3>Comptage enregistré ✓</h3>${res.aRemplir.length?`<p class="hint">Ajouté aux tâches (${mep?"mise en place, dès cet après-midi":"post-service"}) :</p>${res.aRemplir.map(t=>`<div class="item"><span>${mep?"🔪":"🧴"}</span><div class="t"><div class="a">${esc(t)}</div></div></div>`).join("")}`:`<p class="hint">Tout est au complet. Merci !</p>`}<button class="btn full" id="c-fin">OK</button>`,()=>{$("#c-fin").onclick=()=>{close();go(view==="mep"?"mep":"taches")}});
       }catch(e){toast(e.message,true);$("#c-ok").disabled=false}};
       if(manquants&&!confirm(manquants+(manquants>1?" articles pas comptés":" article pas compté")+". Valider quand même ?"))return;
       valider();
