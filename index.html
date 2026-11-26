@@ -235,7 +235,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-27c";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-27d";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -1235,6 +1235,8 @@ async function comptageSheet(tache,liste){
   if(!r.items.length){toast(mep?`Rien à compter dans « ${r.titre} » : la liste se règle sur l'écran de gestion`:"Aucune sauce ni condiment à compter : la liste se règle sur l'écran de gestion",true);return}
   const vals={};
   const fq=q=>String(q).replace(".",","),nb=v=>+String(v).replace(",",".");
+  // mise en place : un seul séparateur décimal (« 1,,5 » -> « 1,5 », « , » seul -> vide), pour que le serveur ne l'ignore jamais
+  const decTxt=t=>{t=String(t).replace(/[^0-9.,]/g,"").replace(/,/g,".");const k=t.indexOf(".");if(k>=0)t=t.slice(0,k+1)+t.slice(k+1).replace(/\./g,"");return t==="."?"":t};
   const ligne=i=>`<div class="inv" data-c="${esc(i.id)}"><div class="t"><div class="a">${esc(i.nom)}</div><div class="b">objectif ${fq(i.cible)}${mep&&i.unite?" "+esc(i.unite):""}${i.weekend?" (week-end)":""}${i.aRemplir?` · déjà ${fq(i.aRemplir)} à ${mep?"préparer":"remplir"}`:""}</div>${i.note?`<div class="b muted">${esc(i.note)}</div>`:""}</div>
     <div class="step"><button data-d="-1" aria-label="Moins">−</button><input inputmode="${mep?"decimal":"numeric"}" enterkeyhint="next" value="" placeholder="?" aria-label="Nombre ${esc(i.nom)}"><button data-d="1" aria-label="Plus">+</button></div></div>`;
   const grp=(type,titre)=>{const it=r.items.filter(i=>i.type===type);return it.length?`<div class="grp">${titre}</div>`+it.map(ligne).join(""):""};
@@ -1249,7 +1251,7 @@ async function comptageSheet(tache,liste){
     const cl=$("#cl"),upd=()=>{$("#c-ok").textContent=`Valider (${Object.keys(vals).filter(k=>vals[k]!=="").length})`};
     const mark=row=>{const i=r.items.find(x=>x.id===row.dataset.c),v=vals[i.id];row.classList.toggle("low",v!==""&&v!=null&&nb(v)<i.cible)};
     cl.addEventListener("click",e=>{const b=e.target.closest("[data-d]");if(!b)return;const row=b.closest("[data-c]"),inp=row.querySelector("input");const v=Math.max(0,(nb(inp.value)||0)+(+b.dataset.d));inp.value=fq(v);vals[row.dataset.c]=String(v);upd();mark(row)});
-    cl.addEventListener("input",e=>{const row=e.target.closest("[data-c]");if(!row)return;vals[row.dataset.c]=mep?e.target.value.replace(/[^0-9.,]/g,"").replace(",","."):e.target.value.replace(/[^0-9]/g,"");upd();mark(row)});
+    cl.addEventListener("input",e=>{const row=e.target.closest("[data-c]");if(!row)return;let v;if(mep){v=decTxt(e.target.value);const aff=v.replace(".",",");if(e.target.value!==aff&&e.target.value.replace(/\./g,",")!==aff)e.target.value=aff}else v=e.target.value.replace(/[^0-9]/g,"");vals[row.dataset.c]=v;upd();mark(row)});
     $("#c-no").onclick=close;
     $("#c-ok").onclick=async()=>{
       const lignes=Object.keys(vals).filter(k=>vals[k]!=="").map(k=>({itemId:k,qte:vals[k]}));

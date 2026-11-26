@@ -601,7 +601,7 @@ async function pRemplissage(){
     ${mep?`<td><input data-f="section" value="${esc(i.section||"")}" placeholder="${esc(r.listes[L])}" title="Regroupe l'écran de comptage et les tâches"></td>`:""}
     <td><input data-f="cible" type="number" min="0" step="${mep?0.5:1}" value="${esc(i.cible)}"></td>
     <td><input data-f="cibleWE" type="number" min="0" step="${mep?0.5:1}" value="${esc(i.cibleWE||"")}" placeholder="${esc(i.cible)}"></td>
-    ${mep?`<td><select data-f="moment"><option value="">Après-midi</option>${(r.moments||[]).filter(m=>m!=="Après-midi").map(m=>`<option ${i.moment===m?"selected":""}>${esc(m)}</option>`).join("")}</select></td>
+    ${mep?`<td><select data-f="moment"><option value="">Après-midi</option>${(r.moments||[]).filter(m=>m!=="Après-midi").map(m=>`<option ${i.moment===m?"selected":""}>${esc(m)}</option>`).join("")}${i.moment&&i.moment!=="Après-midi"&&!(r.moments||[]).includes(i.moment)?`<option selected>${esc(i.moment)}</option>`:""}</select></td>
     <td><input data-f="garde" type="number" min="0" value="${esc(i.garde||"")}" placeholder="—" title="Se garde N jours : la tâche « Refaire » revient N jours après qu'on l'a faite"></td>
     <td><input data-f="note" value="${esc(i.note||"")}" placeholder="—" title="Affichée au comptage et sur la tâche"></td>`:""}
     <td><input data-f="ordre" type="number" value="${esc(i.ordre)}"></td>
