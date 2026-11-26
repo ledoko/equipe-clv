@@ -235,7 +235,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-24c";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-26a";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -1170,7 +1170,8 @@ function recetteSheet(x){
 function choixComptage(){
   open(`<h3>Que veux-tu compter ?</h3><div class="list">
     <button class="btn ghost full" data-l="sauces">🧴 Sauces et condiments</button>
-    <button class="btn ghost full" data-l="salade">🥗 Mise en place : bar à salade</button>
+    <button class="btn ghost full" data-l="barista">☕ Mise en place : barista</button>
+    <button class="btn ghost full" data-l="cuisine">🥗 Mise en place : cuisine</button>
     <button class="btn ghost full" data-l="dessert">🍰 Mise en place : desserts</button></div>
     <div class="actions"><button class="btn ghost" id="cc-x">Annuler</button></div>`,()=>{
     $("#cc-x").onclick=close;
@@ -1183,25 +1184,29 @@ async function comptageSheet(tache,liste){
   const mep=liste!=="sauces";
   if(!r.items.length){toast(mep?`Rien à compter dans « ${r.titre} » : la liste se règle sur l'écran de gestion`:"Aucune sauce ni condiment à compter : la liste se règle sur l'écran de gestion",true);return}
   const vals={};
-  const grp=(type,titre)=>{const it=r.items.filter(i=>i.type===type);if(!it.length)return"";
-    return `<div class="grp">${titre}</div>`+it.map(i=>`<div class="inv" data-c="${esc(i.id)}"><div class="t"><div class="a">${esc(i.nom)}</div><div class="b">objectif ${i.cible}${mep?" "+esc(i.unite):""}${i.weekend?" (week-end)":""}${i.aRemplir?` · déjà ${i.aRemplir} à ${mep?"préparer":"remplir"}`:""}</div></div>
-    <div class="step"><button data-d="-1" aria-label="Moins">−</button><input inputmode="numeric" enterkeyhint="next" value="" placeholder="?" aria-label="Nombre ${esc(i.nom)}"><button data-d="1" aria-label="Plus">+</button></div></div>`).join("")};
-  open(mep?`<h3>Mise en place : ${esc(r.titre.toLowerCase())}</h3><p class="hint">Note combien il en reste de chaque. Ce qui manque devient une tâche « Préparer », à faire tout de suite ou demain avant le service ; elle reste jusqu'à ce qu'elle soit faite.</p>
-  <div class="list" id="cl">${grp("mep",r.titre)}</div>`:`<h3>Compter les pipettes et les condiments</h3><p class="hint">Note combien il en reste de chaque. Ce qui manque devient une tâche « Remplir » qui reste jusqu'à ce qu'elle soit faite.</p>
-  <div class="list" id="cl">${grp("pipette","Sauces (pipettes)")}${grp("pot","Condiments (pots)")}</div>
+  const fq=q=>String(q).replace(".",","),nb=v=>+String(v).replace(",",".");
+  const ligne=i=>`<div class="inv" data-c="${esc(i.id)}"><div class="t"><div class="a">${esc(i.nom)}</div><div class="b">objectif ${fq(i.cible)}${mep&&i.unite?" "+esc(i.unite):""}${i.weekend?" (week-end)":""}${i.aRemplir?` · déjà ${fq(i.aRemplir)} à ${mep?"préparer":"remplir"}`:""}</div>${i.note?`<div class="b muted">${esc(i.note)}</div>`:""}</div>
+    <div class="step"><button data-d="-1" aria-label="Moins">−</button><input inputmode="${mep?"decimal":"numeric"}" enterkeyhint="next" value="" placeholder="?" aria-label="Nombre ${esc(i.nom)}"><button data-d="1" aria-label="Plus">+</button></div></div>`;
+  const grp=(type,titre)=>{const it=r.items.filter(i=>i.type===type);return it.length?`<div class="grp">${titre}</div>`+it.map(ligne).join(""):""};
+  // mise en place : regroupée par section (Bar à salade - Base, Desserts…), dans l'ordre des produits
+  const parSection=()=>{const S=[];r.items.forEach(i=>{const s=i.section||r.titre;let g=S.find(x=>x.s===s);if(!g)S.push(g={s,it:[]});g.it.push(i)});
+    return S.map(g=>`<div class="grp">${esc(g.s)}</div>`+g.it.map(ligne).join("")).join("")};
+  open((mep?`<h3>Mise en place : ${esc(r.titre.toLowerCase())}</h3><p class="hint">Note combien il en reste de chaque (½ = 0,5). Ce qui manque devient une tâche « Préparer », à faire dès l'après-midi ; elle reste jusqu'à ce qu'elle soit faite.</p>
+  <div class="list" id="cl">${parSection()}</div>`:`<h3>Compter les pipettes et les condiments</h3><p class="hint">Note combien il en reste de chaque. Ce qui manque devient une tâche « Remplir » qui reste jusqu'à ce qu'elle soit faite.</p>
+  <div class="list" id="cl">${grp("pipette","Sauces (pipettes)")}${grp("pot","Condiments (pots)")}</div>`)+`
   <div class="actions"><button class="btn ghost" id="c-no">Annuler</button><button class="btn" id="c-ok">Valider (0)</button></div>`,()=>{
     entreeSuivante($("#cl"),".step input");
     const cl=$("#cl"),upd=()=>{$("#c-ok").textContent=`Valider (${Object.keys(vals).filter(k=>vals[k]!=="").length})`};
-    const mark=row=>{const i=r.items.find(x=>x.id===row.dataset.c),v=vals[i.id];row.classList.toggle("low",v!==""&&v!=null&&+v<i.cible)};
-    cl.addEventListener("click",e=>{const b=e.target.closest("[data-d]");if(!b)return;const row=b.closest("[data-c]"),inp=row.querySelector("input");const v=Math.max(0,(parseInt(inp.value)||0)+(+b.dataset.d));inp.value=v;vals[row.dataset.c]=String(v);upd();mark(row)});
-    cl.addEventListener("input",e=>{const row=e.target.closest("[data-c]");if(!row)return;vals[row.dataset.c]=e.target.value.replace(/[^0-9]/g,"");upd();mark(row)});
+    const mark=row=>{const i=r.items.find(x=>x.id===row.dataset.c),v=vals[i.id];row.classList.toggle("low",v!==""&&v!=null&&nb(v)<i.cible)};
+    cl.addEventListener("click",e=>{const b=e.target.closest("[data-d]");if(!b)return;const row=b.closest("[data-c]"),inp=row.querySelector("input");const v=Math.max(0,(nb(inp.value)||0)+(+b.dataset.d));inp.value=fq(v);vals[row.dataset.c]=String(v);upd();mark(row)});
+    cl.addEventListener("input",e=>{const row=e.target.closest("[data-c]");if(!row)return;vals[row.dataset.c]=mep?e.target.value.replace(/[^0-9.,]/g,"").replace(",","."):e.target.value.replace(/[^0-9]/g,"");upd();mark(row)});
     $("#c-no").onclick=close;
     $("#c-ok").onclick=async()=>{
       const lignes=Object.keys(vals).filter(k=>vals[k]!=="").map(k=>({itemId:k,qte:vals[k]}));
       if(!lignes.length){toast(mep?"Compte au moins un produit":"Compte au moins une sauce ou un condiment",true);return}
       const manquants=r.items.filter(i=>vals[i.id]==null||vals[i.id]==="").length;
       const valider=async()=>{$("#c-ok").disabled=true;try{const res=await call("comptageValider",{lignes,tacheId:tache?tache.id:""});
-        open(`<h3>Comptage enregistré ✓</h3>${res.aRemplir.length?`<p class="hint">Ajouté aux tâches (${mep?"mise en place, aujourd'hui et demain avant le service":"post-service"}) :</p>${res.aRemplir.map(t=>`<div class="item"><span>${mep?"🔪":"🧴"}</span><div class="t"><div class="a">${esc(t)}</div></div></div>`).join("")}`:`<p class="hint">Tout est au complet. Merci !</p>`}<button class="btn full" id="c-fin">OK</button>`,()=>{$("#c-fin").onclick=()=>{close();go("taches")}});
+        open(`<h3>Comptage enregistré ✓</h3>${res.aRemplir.length?`<p class="hint">Ajouté aux tâches (${mep?"mise en place, dès cet après-midi":"post-service"}) :</p>${res.aRemplir.map(t=>`<div class="item"><span>${mep?"🔪":"🧴"}</span><div class="t"><div class="a">${esc(t)}</div></div></div>`).join("")}`:`<p class="hint">Tout est au complet. Merci !</p>`}<button class="btn full" id="c-fin">OK</button>`,()=>{$("#c-fin").onclick=()=>{close();go("taches")}});
       }catch(e){toast(e.message,true);$("#c-ok").disabled=false}};
       if(manquants&&!confirm(manquants+(manquants>1?" articles pas comptés":" article pas compté")+". Valider quand même ?"))return;
       valider();
