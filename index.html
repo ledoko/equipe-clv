@@ -235,7 +235,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-27a";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-27b";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -545,13 +545,19 @@ async function semaineTypeSheet(){
 }
 
 // ---------- tâches ----------
+// Dans chaque moment, les tâches d'une même section se suivent (le serveur trie par ordre, qui peut mêler les listes de mise en place)
+function parSections(a){const out=[];let i=0;
+  while(i<a.length){const m=a[i].moment,bloc=[];while(i<a.length&&a[i].moment===m)bloc.push(a[i++]);
+    const S=[];bloc.forEach(x=>{const s=x.section||"";let g=S.find(y=>y.s===s);if(!g)S.push(g={s,it:[]});g.it.push(x)});
+    S.forEach(g=>out.push(...g.it))}
+  return out}
 async function vTaches(){
   // filtre "" = les moments en cartes (avec %) ; un moment = ses tâches ; "tout" = toute la liste
   const d=sub&&sub.date||today(), filtre=sub&&sub.filtre||"", cacher=!!(sub&&sub.cacher);
   const [r,sem]=await Promise.all([call("taches",{date:d}),call("tachesSemaine",{date:d}).catch(()=>null)]);
   const list=r.taches.filter(x=>!(vueEmp&&x.qui==="Gérance"));
   const moments=[...new Set(list.map(x=>x.moment))];
-  const vis=filtre===""?[]:list.filter(x=>(filtre==="tout"||x.moment===filtre)&&!(cacher&&x.fait));
+  const vis=filtre===""?[]:parSections(list.filter(x=>(filtre==="tout"||x.moment===filtre)&&!(cacher&&x.fait)));
   const n=list.length,f=list.filter(x=>x.fait).length;
   // rangées par moment de la journée, avec la plage horaire ; le moment en cours est mis en avant (aujourd'hui)
   const PL=r.plages||{},EMO={"Ouverture":"🌅","Matin":"☕","Pré-service":"🍽️","Journée":"☀️","Post-service":"🧽","Après-midi":"🕒","Nettoyage":"🧹","Fermeture":"🌙"};
@@ -616,7 +622,7 @@ async function vMep(){
   const zones=ZONES_MEP.map(([k,i,l])=>{const c=list.find(x=>String(x.type).startsWith("comptage")&&liste(x)===k);
     return `<button class="card mcard" data-z="${k}"><div class="row"><b class="grow">${i} ${esc(l)}</b><span class="pill ${c&&c.fait?"ok":"info"}">${c&&c.fait?"✓ Compté":"Compter"}</span></div>
       <div class="small muted">${c&&c.fait?`par ${esc(c.fait.par)} à ${c.fait.le.slice(11,16)}`:c?`À compter (${esc(c.moment)})`:"Pas de comptage prévu aujourd'hui"}</div></button>`}).join("");
-  const af=list.filter(x=>(x.type==="remplir"||x.type==="refaire")&&!(cacher&&x.fait));
+  const af=parSections(list.filter(x=>(x.type==="remplir"||x.type==="refaire")&&!(cacher&&x.fait)));
   const n=list.filter(x=>x.type==="remplir"||x.type==="refaire"),f=n.filter(x=>x.fait).length;
   const EMO={"Ouverture":"🌅","Matin":"☕","Pré-service":"🍽️","Journée":"☀️","Post-service":"🧽","Après-midi":"🕒","Nettoyage":"🧹","Fermeture":"🌙"};
   let html="",curM=null,curS=null;
