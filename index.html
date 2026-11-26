@@ -235,7 +235,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-27b";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-27c";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
@@ -1258,7 +1258,7 @@ async function comptageSheet(tache,liste){
       const valider=async()=>{$("#c-ok").disabled=true;try{const res=await call("comptageValider",{lignes,tacheId:tache?tache.id:""});
         open(`<h3>Comptage enregistré ✓</h3>${res.aRemplir.length?`<p class="hint">Ajouté aux tâches (${mep?"mise en place, dès cet après-midi":"post-service"}) :</p>${res.aRemplir.map(t=>`<div class="item"><span>${mep?"🔪":"🧴"}</span><div class="t"><div class="a">${esc(t)}</div></div></div>`).join("")}`:`<p class="hint">Tout est au complet. Merci !</p>`}<button class="btn full" id="c-fin">OK</button>`,()=>{$("#c-fin").onclick=()=>{close();go(view==="mep"?"mep":"taches")}});
       }catch(e){toast(e.message,true);$("#c-ok").disabled=false}};
-      if(manquants&&!confirm(manquants+(manquants>1?" articles pas comptés":" article pas compté")+". Valider quand même ?"))return;
+      if(manquants&&!confirm(manquants+(manquants>1?" articles pas comptés":" article pas compté")+" (leur tâche en cours reste). Valider quand même ?"))return;
       valider();
     };
   });
