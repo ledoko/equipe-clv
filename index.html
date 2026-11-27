@@ -188,6 +188,8 @@ h2{font-family:var(--display);font-weight:600;font-size:1.1rem;margin:0}
 /* formulaires, panneaux */
 .scrim{position:fixed;inset:0;background:rgba(5,20,18,.45);z-index:20;display:flex;align-items:flex-end;justify-content:center}
 .sheet{background:var(--surface);width:100%;max-width:560px;border-radius:24px 24px 0 0;max-height:92%;overflow:auto;padding-block:18px calc(20px + env(safe-area-inset-bottom,0px));padding-left:max(18px,env(safe-area-inset-left,0px));padding-right:max(18px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:14px}
+/* une longue liste ne doit pas être écrasée dans la feuille (elle déborderait cachée) : c'est la feuille qui défile */
+.sheet>*{flex-shrink:0}
 .sheet h3{font-family:var(--display);font-weight:800;font-size:1.3rem;margin:0}
 .hint{margin:0;color:var(--muted);font-size:.9rem}
 label.f{display:flex;flex-direction:column;gap:6px;font-size:.88rem;color:var(--muted)}
@@ -235,7 +237,7 @@ table.rep thead th{border-top:0;color:var(--muted);font-weight:600;font-size:.78
 
 <script>
 (function(){
-const APP_VERSION="2026-11-27d";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
+const APP_VERSION="2026-11-27e";   // à changer à chaque mise à jour (affiché en bas de l'écran Gérer)
 const TOKEN_KEY="equipe-clv-token", INV_KEY="equipe-clv-inventaire";
 const UA=navigator.userAgent||"";
 const IOS=/iPhone|iPad|iPod/.test(UA)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
